@@ -4,7 +4,7 @@ PLUGINS    := $(notdir $(wildcard plugins/*))
 DIST       := dist
 TK         := python3 toolkit
 
-.PHONY: help validate check-render build package package-done install check-target mirror cutover test dev clean
+.PHONY: help validate check-render build package package-done install check-target docs-export mirror cutover test dev clean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -38,6 +38,10 @@ install: ## Vendor a target into a repo's .claude/: make install TARGET=solo7-me
 check-target: ## Report drift between a target repo and this repo: make check-target TARGET=… DEST=…
 	@test -n "$(TARGET)" -a -n "$(DEST)" || { echo "usage: make check-target TARGET=<name> DEST=<repo path>"; exit 1; }
 	$(TK)/install.py --root $(CURDIR) --check $(TARGET) $(DEST)
+
+docs-export: ## Export docs/ to a site repo as content/<repo>/: make docs-export SITE=../solo7.media [DRY=1]
+	@test -n "$(SITE)" || { echo "usage: make docs-export SITE=<site repo path> [DRY=1]"; exit 1; }
+	$(TK)/export_docs.py --root $(CURDIR) $(if $(DRY),--dry-run) $(SITE)
 
 mirror: ## Mirror a repo's story files into its GitHub Project (dry run; APPLY=1 writes): make mirror DEST=… [TARGET=…]
 	@test -n "$(DEST)" || { echo "usage: make mirror DEST=<repo path> [TARGET=<t> for its _repo.md settings] [REF=origin/main] [REPO=owner/name] [PROJECT=title] [APPLY=1|OFFLINE=1]"; exit 1; }
