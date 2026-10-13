@@ -9,6 +9,7 @@ Build, check, and install scripts for agent-config repos: repos of Claude Code p
 | `check_conventions.py` | Authoring conventions: `references/examples.md` per skill, skill upload limits, `Assist level: L<n>` on agents and roles, plugin README roles tables. |
 | `package.py [--all\|--done]` | Zips skills changed since the last `--done` for claude.ai upload. |
 | `scaffold.py [--into] <name> <dest>` | New repo, or an existing one, from `scaffolds/<name>/`. |
+| `export_docs.py [--dry-run] <site>` | Copies `docs/**` to `<site>/content/<repo name>/` for the docs site. Links outside `docs/` become GitHub URLs at the exported commit; a broken link fails. `.export.json` there records the commit and files, so a re-export removes dropped files and a directory without it is never written. |
 
 Every script takes `--root DIR`, the repo it works on. The default is the git toplevel of the working directory.
 

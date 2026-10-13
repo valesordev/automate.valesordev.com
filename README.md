@@ -4,6 +4,7 @@ Claude Code agent configuration for Valesor Development: a plugin marketplace (`
 
 | Path | What |
 |---|---|
+| `docs/` | How to use it: [getting started](docs/getting-started.md), [working in a role](docs/working-in-a-role.md), and the [role catalog](docs/roles.md). |
 | `plugins/valesor-dev/` | Role-based development machinery: `/role` sessions with path ownership, sprint skills, the pre-PR review gate, PR comment handling, the story CLI and GitHub Project mirror, the lane coordinator, and base role charters (`product`, `sre`, `visual-designer`). See its [README](plugins/valesor-dev/README.md). |
 | `targets/<repo>/` | One repo's agent config: which plugins it vendors, its role files, permission entries, and `main` ruleset. |
 | `toolkit/` | Install, render, convention-check, package, and scaffold scripts. Other agent-config repos pin it through `deps.json`. See its [README](toolkit/README.md). |

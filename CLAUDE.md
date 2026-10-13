@@ -8,7 +8,9 @@ Help the owner move projects forward, build lasting skills while doing it, and u
 
 ## Sources of truth
 
-- **This repo**: everything agents execute, and the docs for it (`plugins/valesor-dev/README.md`, `toolkit/README.md`). It is public: no secrets, no personal names (say "the owner"), no private Notion links, no machine-specific paths.
+- **This repo**: everything agents execute, and how to use it. `docs/` is authoritative for usage (install, roles, skills, contracts), with the reference beside the code (`plugins/valesor-dev/README.md`, `toolkit/README.md`). It is public: no secrets, no personal names (say "the owner"), no private Notion links (`tests/test_public.py` fails on one), no machine-specific paths.
+- **Direction** (rationale, roadmap, decision log) is the owner's, kept privately. Nothing here depends on it: a doc that needs a decision states the decision.
+- **Docs site.** `make docs-export SITE=<sites monorepo>` writes `docs/` to its `content/automate.valesordev.com/`; the site build and deploy live there. Change a usage doc here in the same PR as the behavior it describes.
 - Repos that pin this one (`deps.json`) own their own targets and plugins. A change here reaches them only when they move their pin.
 
 ## Repository layout
@@ -17,8 +19,9 @@ Help the owner move projects forward, build lasting skills while doing it, and u
 .
 ├── .claude-plugin/marketplace.json   # marketplace "valesordev"
 ├── CLAUDE.md                         # this file
-├── Makefile                          # validate / test / build / package / install / check-target / mirror / cutover / dev
-├── toolkit/                          # install, render, check_conventions, package, scaffold (+ sources.py); its own fixture tests
+├── docs/                             # usage docs: getting started, working in a role, role catalog (exported to the docs site)
+├── Makefile                          # validate / test / build / package / install / check-target / docs-export / mirror / cutover / dev
+├── toolkit/                          # install, render, check_conventions, package, scaffold, export_docs (+ sources.py); its own fixture tests
 ├── plugins/valesor-dev/
 │   ├── .claude-plugin/plugin.json
 │   ├── README.md                     # roles + assist levels, hooks, coordinator, lanes: the long-form docs
@@ -110,6 +113,7 @@ Tests use the fixture targets in `tests/fixtures/consumer/` (`game-server`, `gam
 | `make package [ALL=1]` / `make package-done` | Zip skills changed since the last upload for claude.ai / record them as uploaded |
 | `make install TARGET=<t> DEST=<repo>` | Vendor a target into `<repo>/.claude/` (commit it there) |
 | `make check-target TARGET=<t> DEST=<repo>` | Report drift; exit 1 if the target is edited, outdated, or stale |
+| `make docs-export SITE=<repo> [DRY=1]` | Export `docs/` to the sites monorepo's `content/automate.valesordev.com/` (commit it there) |
 | `make mirror DEST=<repo> [TARGET=<t>] [APPLY=1]` | Run `project-mirror` against a clone (dry run without `APPLY=1`) |
 | `make cutover DEST=<repo> [REF=stories-final] [APPLY=1]` | Hand a mirrored repo's board to GitHub (dry run without `APPLY=1`) |
 | `make dev` | Register this checkout as local marketplace `valesordev` |
