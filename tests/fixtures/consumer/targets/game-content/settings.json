@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.claude/bin/coordinator plan:*)",
+      "Bash(.claude/bin/coordinator status)"
+    ],
+    "ask": [
+      "Bash(.claude/bin/coordinator run:*)",
+      "Bash(.claude/bin/coordinator clean:*)",
+      "Bash(.claude/bin/coordinator handoff:*)"
+    ]
+  }
+}

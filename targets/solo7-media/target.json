@@ -1,0 +1,5 @@
+{
+  "description": "solo7.media monorepo (valesordev/solo7.media): the brand kits and sites for Valesor Development, System 9 Studios, Solo7 Productions, solo7.media, and bashburn.com, deployed to Cloudflare. Roles: product, pm, architecture, visual-designer, implementation, sre.",
+  "plugins": ["valesor-dev"],
+  "roles": "roles"
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Fixture: Demo Game server repo (tests only).",
+  "plugins": [
+    "valesor-dev"
+  ],
+  "roles": "roles"
+}
