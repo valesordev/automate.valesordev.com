@@ -3,3 +3,4 @@ __pycache__/
 .deps/
 dist/
 .claude-ai-uploads.json
+.tools/

@@ -9,6 +9,8 @@ Build, check, and install scripts for agent-config repos: repos of Claude Code p
 | `check_conventions.py` | Authoring conventions: `references/examples.md` per skill, skill upload limits, `Assist level: L<n>` on agents and roles, plugin README roles tables. |
 | `package.py [--all\|--done]` | Zips skills changed since the last `--done` for claude.ai upload. |
 | `scaffold.py [--into] <name> <dest>` | New repo, or an existing one, from `scaffolds/<name>/`. |
+| `check_public.py [--denylist FILE\|--no-denylist] [--commits RANGE] [--no-gitleaks]` | The public-readiness gate. Fails on a private Notion link or a denylist entry (`$AUTOMATE_DENYLIST`, outside the repo; whole words or `re:` patterns; hits name the entry's line, never the term) in tracked files, and with `--commits` in those commits' messages and file versions; then `gitleaks git --redact` over the whole history. |
+| `tools.py` | Fetches the pinned gitleaks into `.tools/`, checksum-verified. |
 | `export_docs.py [--dry-run] <site>` | Copies `docs/**` to `<site>/content/<repo name>/` for the docs site. Links outside `docs/` become GitHub URLs at the exported commit; a broken link fails. `.export.json` there records the commit and files, so a re-export removes dropped files and a directory without it is never written. |
 
 Every script takes `--root DIR`, the repo it works on. The default is the git toplevel of the working directory.
@@ -57,7 +59,7 @@ pin: ## Move one dependency: make pin DEP=<name> REF=<tag or commit>
 	@$(MAKE) -s deps
 ```
 
-Targets that run the toolkit call `$(TK)/install.py --root $(CURDIR) …` and the like. Have them depend on a check that `$(TOOLKIT)` exists, so a fresh clone gets "run `make deps`" instead of a missing-file error.
+Targets that run the toolkit call `$(TK)/install.py --root $(CURDIR) …` and the like. A public repo adds `tools` (`$(TK)/tools.py --root $(CURDIR)`, gitignore `.tools/`) and `check-public: tools` (`$(TK)/check_public.py --root $(CURDIR) …`), and CI runs `make check-public` with the `AUTOMATE_DENYLIST` secret written to a file. Have them depend on a check that `$(TOOLKIT)` exists, so a fresh clone gets "run `make deps`" instead of a missing-file error.
 
 ## Tests
 

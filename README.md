@@ -15,6 +15,7 @@ Claude Code agent configuration for Valesor Development: a plugin marketplace (`
 ```sh
 make test                                   # toolkit fixture tests, then plugin and target tests
 make validate                               # needs the `claude` CLI
+make check-public                           # nothing private: needs AUTOMATE_DENYLIST (a file outside the repo)
 make install TARGET=solo7-media DEST=../solo7.media
 make check-target TARGET=solo7-media DEST=../solo7.media
 ```
@@ -24,3 +25,7 @@ make check-target TARGET=solo7-media DEST=../solo7.media
 ## Depending on this repo
 
 Another agent-config repo pins a tag of this one in its `deps.json` and runs the toolkit from `.deps/valesordev/toolkit/`. Its targets can then vendor `valesor-dev` and extend its base roles. The toolkit README has the Makefile snippet.
+
+## License and contributing
+
+Apache-2.0 ([LICENSE](LICENSE)). Issues are welcome; see [CONTRIBUTING](CONTRIBUTING.md) before opening a PR.

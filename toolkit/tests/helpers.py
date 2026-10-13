@@ -10,8 +10,8 @@ TOOLKIT = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-def run(*args, cwd=None):
-    return subprocess.run([str(a) for a in args], capture_output=True, text=True, cwd=cwd)
+def run(*args, cwd=None, env=None):
+    return subprocess.run([str(a) for a in args], capture_output=True, text=True, cwd=cwd, env=env)
 
 
 def git(cwd, *args):
@@ -44,8 +44,8 @@ class ToolkitCase(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def tool(self, script, *args, cwd=None):
-        return run(sys.executable, TOOLKIT / script, "--root", self.home, *args, cwd=cwd)
+    def tool(self, script, *args, cwd=None, env=None):
+        return run(sys.executable, TOOLKIT / script, "--root", self.home, *args, cwd=cwd, env=env)
 
     def install(self, *flags):
         return self.tool("install.py", *flags, "demo", self.dest)

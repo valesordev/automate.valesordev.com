@@ -8,7 +8,7 @@ Help the owner move projects forward, build lasting skills while doing it, and u
 
 ## Sources of truth
 
-- **This repo**: everything agents execute, and how to use it. `docs/` is authoritative for usage (install, roles, skills, contracts), with the reference beside the code (`plugins/valesor-dev/README.md`, `toolkit/README.md`). It is public: no secrets, no personal names (say "the owner"), no private Notion links (`tests/test_public.py` fails on one), no machine-specific paths.
+- **This repo**: everything agents execute, and how to use it. `docs/` is authoritative for usage (install, roles, skills, contracts), with the reference beside the code (`plugins/valesor-dev/README.md`, `toolkit/README.md`). It is public: no secrets, no personal names (say "the owner"), no private Notion links, no machine-specific paths. `make check-public` enforces it (Notion links, the owner's denylist, gitleaks over the whole history), and CI runs it on every PR and push to `main`.
 - **Direction** (rationale, roadmap, decision log) is the owner's, kept privately. Nothing here depends on it: a doc that needs a decision states the decision.
 - **Docs site.** `make docs-export SITE=<sites monorepo>` writes `docs/` to its `content/automate.valesordev.com/`; the site build and deploy live there. Change a usage doc here in the same PR as the behavior it describes.
 - Repos that pin this one (`deps.json`) own their own targets and plugins. A change here reaches them only when they move their pin.
@@ -20,8 +20,8 @@ Help the owner move projects forward, build lasting skills while doing it, and u
 ├── .claude-plugin/marketplace.json   # marketplace "valesordev"
 ├── CLAUDE.md                         # this file
 ├── docs/                             # usage docs: getting started, working in a role, role catalog (exported to the docs site)
-├── Makefile                          # validate / test / build / package / install / check-target / docs-export / mirror / cutover / dev
-├── toolkit/                          # install, render, check_conventions, package, scaffold, export_docs (+ sources.py); its own fixture tests
+├── Makefile                          # validate / check-public / tools / test / build / package / install / check-target / docs-export / mirror / cutover / dev
+├── toolkit/                          # install, render, check_conventions, check_public, tools, package, scaffold, export_docs (+ sources.py); its own fixture tests
 ├── plugins/valesor-dev/
 │   ├── .claude-plugin/plugin.json
 │   ├── README.md                     # roles + assist levels, hooks, coordinator, lanes: the long-form docs
@@ -107,6 +107,8 @@ Tests use the fixture targets in `tests/fixtures/consumer/` (`game-server`, `gam
 | Target | Purpose |
 |---|---|
 | `make validate` | `check-render`, then `claude plugin validate` on the marketplace and each plugin, then `toolkit/check_conventions.py` (examples, skill upload limits, assist levels, README roles tables) |
+| `make check-public [COMMITS=<range>]` | The public-readiness gate: `toolkit/check_public.py` with the denylist at `$AUTOMATE_DENYLIST` (a file outside every repo; CI reads the `AUTOMATE_DENYLIST` secret). Hits name the denylist line, never the term |
+| `make tools` | Fetch the pinned gitleaks into `.tools/` |
 | `make check-render` | Fail if any `plugins/*/src/**` render is stale |
 | `make test` | The toolkit's fixture tests, then `tests/` (role hooks, story, mirror, coordinator, targets) |
 | `make build` | Render `plugins/*/src/**` in place |
@@ -121,7 +123,7 @@ Tests use the fixture targets in `tests/fixtures/consumer/` (`game-server`, `gam
 ## Definition of done
 
 - Every role declares its assist level, triggers, behaviors, handoffs, and session close.
-- `make validate test` passes; `make build` is clean.
+- `make validate test check-public` passes; `make build` is clean.
 - `solo7-media` re-installed and `make check-target` clean when the change touches it. Design new `valesor-dev` machinery for every kind of target, not one repo.
 - Consumers that need the change get a tag, and their pin moves in their own PR.
 - Signed commits on a feature branch, `plugin.json` version bumped if behavior changed.
