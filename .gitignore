@@ -4,3 +4,4 @@ __pycache__/
 dist/
 .claude-ai-uploads.json
 .tools/
+.envrc
