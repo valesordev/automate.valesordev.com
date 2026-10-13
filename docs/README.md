@@ -7,6 +7,7 @@ How to use the Valesor Development agents: the `valesor-dev` Claude Code plugin,
 | [Getting started](getting-started.md) | Giving a repo the agents: a target, the install, the first session, updates |
 | [Working in a role](working-in-a-role.md) | Day to day: one session, one role; what the hooks allow; the sprint cycle; PRs |
 | [Role catalog](roles.md) | Every role: what it owns, its assist level, its skills |
+| [Releasing](releasing.md) | Getting a change merged here into the repos that run it: tag, install, pin, and the order |
 
 Reference, kept beside the code it describes:
 
