@@ -1,0 +1,16 @@
+{
+  "name": "valesordev",
+  "owner": {
+    "name": "Solo7"
+  },
+  "metadata": {
+    "description": "Valesor Development: Claude Code plugins for role-based software projects, and the toolkit that vendors them into repos."
+  },
+  "plugins": [
+    {
+      "name": "valesor-dev",
+      "source": "./plugins/valesor-dev",
+      "description": "Valesor Development: product, project manager, architect, developer, SRE, visual designer."
+    }
+  ]
+}
