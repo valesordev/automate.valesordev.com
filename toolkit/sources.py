@@ -11,6 +11,7 @@ shadow what a dependency ships.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -52,6 +53,28 @@ def _name(d: Path, repo: str = "") -> str:
     name = repo.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1].removesuffix(".git")
     return name or d.name
 
+
+
+def _git(d: Path, *args: str) -> str:
+    try:
+        r = subprocess.run(["git", "-C", str(d), *args], capture_output=True, text=True)
+    except OSError:
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def origin(d: Path) -> str:
+    """Where `d` comes from: `owner/name` for a GitHub remote, else the remote URL ("" without one)."""
+    url = _git(d, "remote", "get-url", "origin")
+    m = re.match(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([\w.-]+/[\w.-]+?)(?:\.git)?/?$", url)
+    return m.group(1) if m else url
+
+
+def tag_at_head(d: Path) -> str:
+    """The tag on a clean HEAD, if any: what a release install was made from."""
+    if _git(d, "status", "--porcelain"):
+        return ""
+    return _git(d, "describe", "--tags", "--exact-match", "HEAD")
 
 class Sources:
     def __init__(self, root: Path):

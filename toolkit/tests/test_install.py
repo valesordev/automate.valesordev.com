@@ -35,6 +35,15 @@ class InstallTest(ToolkitCase):
         self.assertLess(lead.index("Lead base body."), lead.index("Lead in the demo repo."))
         self.assertIn("Assist level: L3", lead)
 
+    def test_manifest_records_the_source_repo_and_its_tag(self):
+        self.assertNotIn("repo", self.manifest)              # no origin remote
+        self.assertNotIn("ref", self.manifest)               # HEAD carries no tag
+        git(self.home, "remote", "add", "origin", "git@github.com:acme/automate.acme.example.git")
+        git(self.home, "-c", "tag.gpgSign=false", "tag", "v1.2.3")
+        self.assertEqual(self.install().returncode, 0)
+        m = json.loads((self.dest / ".claude/.automate.json").read_text())
+        self.assertEqual((m["repo"], m["ref"]), ("acme/automate.acme.example", "v1.2.3"))
+
     def test_manifest_records_each_source(self):
         home_rev = git(self.home, "rev-parse", "--short", "HEAD").strip()
         dep_rev = git(self.dep, "rev-parse", "--short", "HEAD").strip()

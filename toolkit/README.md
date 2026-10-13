@@ -30,7 +30,7 @@ A repo lists what it pins in `deps.json`:
 - `install.py`: a target's `plugins` (and the base roles they ship, for `extends`).
 - `render.py`: each `{{include path}}`.
 
-So a repo can vendor a plugin another repo ships, render a fragment another repo owns, and shadow either with its own copy. `.claude/.automate.json` records `source` (`<repo>@<commit>`) and, when there are dependencies, `sources`: each repo's commit.
+So a repo can vendor a plugin another repo ships, render a fragment another repo owns, and shadow either with its own copy. `.claude/.automate.json` records `source` (`<repo>@<commit>`), `repo` (the source's `origin`: `<owner>/<name>` on GitHub, else its URL), `ref` (the tag at the source's HEAD, when the tree is clean), and, when there are dependencies, `sources`: each repo's commit. `repo` and `ref` are what `valesor-dev`'s `update-agents` reads.
 
 To work on a dependency and a consumer together, make `.deps/<name>` a symlink to a local checkout; `make deps` leaves a symlink alone.
 

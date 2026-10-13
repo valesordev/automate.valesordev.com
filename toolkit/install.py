@@ -25,8 +25,9 @@ are vendored rather than installed:
     targets/<t>/settings.json -> merged into .claude/settings.json: entries of
                                  permissions.allow/ask/deny (nothing else)
 
-.claude/.automate.json records the source repo and commit, each dependency's
-commit (`sources`), every managed file's hash,
+.claude/.automate.json records the source repo and commit, the source's
+`repo` (`owner/name` on GitHub, else its remote URL) and `ref` (the tag at a clean
+HEAD, if any: what `update-agents` reads), each dependency's commit (`sources`), every managed file's hash,
 the managed hook commands, and the permission entries install added (an entry
 that was already there stays the repo's own, and is never removed). Re-running replaces managed content and leaves
 everything else in settings.json and .claude/ alone. A managed file edited in
@@ -41,7 +42,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sources import Sources, repo_root  # noqa: E402
+from sources import Sources, origin, repo_root, tag_at_head  # noqa: E402
 
 MANIFEST = ".claude/.automate.json"
 
@@ -259,9 +260,12 @@ def main(argv: list[str]) -> int:
 
     prov = sources.provenance()
     name, rev = next(iter(prov.items()))
+    repo, ref = origin(sources.root), tag_at_head(sources.root)
     manifest = {
         "source": f"{name}@{rev}",
         "target": target,
+        **({"repo": repo} if repo else {}),
+        **({"ref": ref} if ref else {}),
         "files": {rel: sha(dest / rel) for rel in files},
         "hook_commands": sorted(hook_commands(hooks)),
     }
