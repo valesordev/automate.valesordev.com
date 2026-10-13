@@ -26,7 +26,7 @@ Help the owner move projects forward, build lasting skills while doing it, and u
 │   ├── .claude-plugin/plugin.json
 │   ├── README.md                     # roles + assist levels, hooks, coordinator, lanes: the long-form docs
 │   ├── skills/<skill>/SKILL.md       # + references/
-│   ├── bin/                          # role, story, sprint-state, project-mirror, coordinator, codex-review
+│   ├── bin/                          # role, story, sprint-state, project-mirror, coordinator, codex-review, update-agents
 │   ├── hooks/hooks.json              # uses ${CLAUDE_PLUGIN_ROOT}
 │   ├── roles/<name>.md               # base charters (product, sre, visual-designer) that target roles `extends`
 │   └── workflows/                    # GitHub Actions vendored to a target's .github/workflows/
