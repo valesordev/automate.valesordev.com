@@ -1,0 +1,3 @@
+{
+  "upstream": {"repo": "example/automate.upstream.example", "ref": "v1"}
+}
