@@ -1,5 +1,4 @@
 """This repo is public: no private Notion links anywhere, and docs/ exports to the docs site cleanly."""
-import re
 import subprocess
 import sys
 import tempfile
@@ -15,10 +14,9 @@ def run(*cmd):
 
 class PublicTest(unittest.TestCase):
     def test_no_private_notion_links(self):
-        files = run("git", "ls-files").stdout.split()
-        self.assertTrue(files)
-        pat = re.compile(r"notion\.(so|com)/(p/)?([\w-]*-)?[0-9a-f]{32}")
-        self.assertEqual([f for f in files if not (ROOT / f).is_symlink() and pat.search((ROOT / f).read_text(errors="replace"))], [])
+        # The full gate (denylist, gitleaks) is `make check-public`; this part needs neither.
+        r = run(sys.executable, "toolkit/check_public.py", "--root", str(ROOT), "--no-denylist", "--no-gitleaks")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_docs_export_cleanly(self):
         with tempfile.TemporaryDirectory() as site:

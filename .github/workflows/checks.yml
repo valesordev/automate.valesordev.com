@@ -22,6 +22,29 @@ jobs:
       - run: npm install -g @anthropic-ai/claude-code
       - run: make validate
 
+  check-public:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: make check-public
+        env:
+          DENYLIST: ${{ secrets.AUTOMATE_DENYLIST }}
+          COMMITS: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || '' }}
+        run: |
+          if [ -n "$DENYLIST" ]; then
+            printf '%s\n' "$DENYLIST" > "$RUNNER_TEMP/denylist"
+            export AUTOMATE_DENYLIST="$RUNNER_TEMP/denylist"
+            make check-public COMMITS="$COMMITS"
+          else
+            echo "::warning::No AUTOMATE_DENYLIST secret (a fork PR?): checking without the denylist"
+            make check-public COMMITS="$COMMITS" NO_DENYLIST=1
+          fi
+
   test:
     runs-on: ubuntu-latest
     steps:
