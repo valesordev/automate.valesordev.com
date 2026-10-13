@@ -66,4 +66,4 @@ Before a repo has `update-agents` (or for a change you haven't tagged), install 
 
 ## From another agent-config repo
 
-A repo with its own plugins and targets can pin this one (a tag) in its `deps.json` and run the toolkit from `.deps/valesordev/toolkit/`. Its targets can then vendor `valesor-dev` and `extends` its base roles; the [toolkit README](../toolkit/README.md#dependencies) has the Makefile snippet. A change here reaches it only when it moves its pin (`make pin DEP=valesordev REF=<tag>`).
+A repo with its own plugins and targets can pin this one (a tag) in its `deps.json` and run the toolkit from `.deps/valesordev/toolkit/`. Its targets can then vendor `valesor-dev` and `extends` its base roles; the [toolkit README](../toolkit/README.md#dependencies) has the Makefile snippet. A change here reaches it only when it moves its pin (`make pin DEP=valesordev REF=<tag>`). [Releasing](releasing.md) has the full chain.
