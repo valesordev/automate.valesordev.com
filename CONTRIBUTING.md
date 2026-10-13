@@ -2,7 +2,7 @@
 
 This repo is the agent configuration for Valesor Development's own projects. It's public so the toolkit and `valesor-dev` can be reused, but it's maintained for those projects first.
 
-- **Issues** are welcome: bugs, questions, and ideas.
+- **Issues** are welcome: bugs, questions, and ideas. If an agent did the wrong thing, use the *Skill refinement* form.
 - **Pull requests:** open an issue first so we can agree on the change. A PR without one may be closed.
 - Contributions are under Apache-2.0, the repo's license.
 

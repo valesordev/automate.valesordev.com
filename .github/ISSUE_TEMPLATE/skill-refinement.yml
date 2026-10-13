@@ -1,0 +1,73 @@
+name: Skill refinement
+description: An agent, skill, or tool did something other than what it should have during a session.
+title: "<plugin>/<skill or agent>: "
+labels: ["kind:refinement", "source:session"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One behavior per issue. Keep the excerpt sanitized: no personal details, credentials, private links, or machine paths: this repo is public.
+        Agents may draft this form during a session; it's created only on the owner's yes.
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      options:
+        - valesor-dev
+        - toolkit
+        - other
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: Skill, agent, or tool
+      placeholder: "skills/<name>, agents/<role>, bin/<tool>, a target's role file"
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - skill
+        - agent
+        - tooling
+        - contract
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What the agent did, and what you'd asked for.
+    validations:
+      required: true
+  - type: textarea
+    id: excerpt
+    attributes:
+      label: Sanitized excerpt
+      description: The relevant part of the session, trimmed and sanitized.
+      render: text
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed change
+      description: The rule, step, or check to add or change, and where (SKILL.md, charter, reference, hook).
+  - type: dropdown
+    id: assist
+    attributes:
+      label: Assist level
+      description: The role's level, and whether this change would move it.
+      options:
+        - Unchanged
+        - Move to L0 Coach
+        - Move to L1 Guide
+        - Move to L2 Pair
+        - Move to L3 Delegate
