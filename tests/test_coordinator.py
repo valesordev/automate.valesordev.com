@@ -142,6 +142,20 @@ class LaneConfigTest(unittest.TestCase):
         self.assertEqual(cfg["approval"], "a, b")
         self.assertFalse(coord.role_settings({"inbox": "no"}, "visual-designer")["inbox"])
 
+    def test_handoffs_owed_counts_planner_bullets_and_none_as_zero(self):
+        h = "## Release changes (after merge)"
+        roles = {"product", "pm", "visual-designer"}
+        for section, owed in (("None. Releases are planned in the next PR.", 0),
+                              ("None new. The roadmap request to pm is open as #7.", 0),
+                              ("**None.**", 0),
+                              ("Nothing here, just prose.", 0),
+                              ("- pm: add Release: R1 to M0\n- producer: key C1 to R1", 2),
+                              ("- **visual-designer:** routed through FEAT-02 Dependencies\n- **pm:** cut S-12", 1),
+                              ("- `pm` — cut S-12", 1),
+                              ("- add Release: R1 to M0", 1),       # unaddressed: still owed
+                              ("- pm: x\n\n## Notes\n- y", 1)):
+            self.assertEqual(coord.handoffs_owed(f"x\n\n{h}\n{section}", h, roles), owed, section)
+        self.assertEqual(coord.handoffs_owed("no section", h, roles), 0)
 
 SESS = {"implementation": "story", "sre": "session", "pm": "session", "product": "session"}
 
@@ -1858,6 +1872,27 @@ Assist level: L2 — drafts brand docs; the owner decides.
                 sh.open_handoff(7)
             code, out, _ = self.go("plan", "--roles", "product", shell=sh)
             self.assertEqual("Lanes to start:\n  product" in out, queued, f"{opened}: {out}")
+
+    def test_a_merged_pr_whose_release_changes_say_none_is_not_queued(self):
+        self.make_product_a_lane()
+        none = {"number": 5, "url": "https://gh/pull/5",
+                "body": "## Release changes (after merge)\nNone. Releases are planned in the next PR."}
+        routed = {"number": 37, "url": "https://gh/pull/37", "body": "## Release changes (after merge)\n"
+                  "- **architecture:** routed through FEAT-02 Dependencies\n- **pm:** cut the privacy story"}
+        sh = FakeShell(SPRINT, merged_prs=[none, routed], handoffs_opened={37})
+        code, out, _ = self.go("plan", "--roles", "product", shell=sh)
+        self.assertIn("No lane can start", out)
+
+    def test_a_missing_handoff_is_reported_as_missing_not_untouched(self):
+        self.make_product_a_lane()
+        owing = {"number": 7, "url": "https://gh/pull/7", "body": "## Release changes (after merge)\n- pm: x\n- producer: y"}
+        sh = FakeShell(SPRINT, make_pr=False, merged_prs=[owing], handoffs_opened={7},
+                       claude_json={"result": "LANE RESULT: nothing to do", "is_error": False})
+        self.go("run", "--apply", "--roles", "product", "--poll", "0.05", shell=sh)
+        code, out, _ = self.go("plan", "--roles", "product", shell=sh)
+        self.assertIn("PR#7", out)
+        self.assertIn("merged; release-change handoff missing (1 of 2)", out)
+        self.assertNotIn("left untouched by the last lane", out)
 
     def test_a_handoff_counts_once_its_issue_exists(self):
         self.make_product_a_lane()
