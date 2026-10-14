@@ -1,4 +1,4 @@
-"""bin/update-agents: install a repo's agents from a signed tag of its agent-config repo, then branch, commit, PR."""
+"""toolkit/update-agents (vendored as .claude/bin/update-agents): install a repo's agents from a signed tag of its agent-config repo, then branch, commit, PR."""
 import json
 import os
 import shutil
@@ -7,9 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-TOOL = ROOT / "plugins/valesor-dev/bin/update-agents"
-TOOLKIT = ROOT / "toolkit"
+TOOLKIT = Path(__file__).resolve().parent.parent
+TOOL = TOOLKIT / "update-agents"
 FIXTURES = TOOLKIT / "tests/fixtures"
 
 # The agent-config repo's Makefile, as the real ones behave: deps, install, check-target.
