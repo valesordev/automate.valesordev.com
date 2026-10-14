@@ -8,6 +8,7 @@ skills: [brand-audit, art-direction, art-slot, brand-qa, design-start-sprint]
 transitions: [ready>in-progress@lane]
 on_merge: [in-progress>review@lane]
 sprint_run: story
+lane_allow: [Bash(make qa-shots-valesordev:*)]
 start_skill: design-start-sprint
 inbox: true
 approval: the owner approves the audit and the illustration system, selects every candidate, and approves each mark, token value and typeface

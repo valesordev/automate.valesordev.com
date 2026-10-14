@@ -6,7 +6,7 @@ writes: ["brands/*/components/*", sites/, packages/, "!sites/*/wrangler.jsonc", 
 skills: [impl-start-sprint, brand-qa]
 transitions: [ready>in-progress@lane]
 on_merge: [in-progress>review@lane]
-lane_allow: [Bash(make test-brand-valesordev:*)]
+lane_allow: [Bash(make test-brand-valesordev:*), Bash(make qa-shots-valesordev:*)]
 ---
 # Role: IMPLEMENTATION
 
