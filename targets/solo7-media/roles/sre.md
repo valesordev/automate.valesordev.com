@@ -8,6 +8,7 @@ skills: [sre-start-sprint]
 transitions: [ready>in-progress@lane]
 story_edits: [body]
 on_merge: [in-progress>review@lane]
+lane_allow: [Bash(make qa-browser-install:*), Bash(make qa-shots-valesordev:*)]
 ---
 ## solo7.media sites
 
