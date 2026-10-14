@@ -887,6 +887,77 @@ class RunTest(unittest.TestCase):
         log = subprocess.run(["git", "log", "--format=%s", "-1"], cwd=work, capture_output=True, text=True).stdout
         self.assertEqual(log.strip(), "lane work")  # the earlier commit is still there
 
+    def behind_main(self, pushed=False, lane_edits=None):
+        """A resumed lane whose branch was cut before main moved on: main installs a newer role hook
+        (the #21 case), and the lane committed its work (lane_edits: path -> text) on the old one."""
+        self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05", "--max-lanes", "1")
+        work = self.wt("implementation-gs-srv-001")
+        g = lambda cwd, *a: subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",  # noqa: E731
+                                            "-c", "commit.gpgsign=false", *a], cwd=cwd, check=True,
+                                           capture_output=True, text=True).stdout.strip()
+        for f, text in (lane_edits or {"lane.txt": "lane work\n"}).items():
+            (work / f).write_text(text)
+        g(work, "add", "-A")
+        g(work, "commit", "-q", "-m", "lane work")
+        if pushed:
+            g(work, "push", "-q", "origin", "HEAD")
+        role = self.repo / ".claude/bin/role"
+        role.write_text(role.read_text() + "# a newer install\n")
+        g(self.repo, "commit", "-q", "-am", "newer install")
+        g(self.repo, "push", "-q", "origin", "main")
+        self.set_status("GS-SRV-001", "in-progress")
+        return work, g
+
+    def test_a_resumed_unpushed_branch_is_rebased_onto_main_first(self):
+        work, g = self.behind_main()
+        sh = FakeShell(SPRINT)
+        code, out, _ = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05",
+                               "--max-lanes", "1", shell=sh)
+        self.assertEqual(len(sh.started), 1, out)
+        self.assertIn("rebased onto origin/main: impl/implementation-gs-srv-001 (1 commit behind)", out)
+        self.assertEqual(g(work, "log", "--format=%s", "-2").splitlines(), ["lane work", "newer install"])
+        # the lane starts on the current .claude/, not the one its branch was cut with
+        self.assertEqual((work / ".claude/bin/role").read_text(), (self.repo / ".claude/bin/role").read_text())
+
+    def test_a_resumed_pushed_branch_merges_main_instead(self):
+        work, g = self.behind_main(pushed=True)
+        before = g(work, "rev-parse", "HEAD")
+        sh = FakeShell(SPRINT)
+        code, out, _ = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05",
+                               "--max-lanes", "1", shell=sh)
+        self.assertEqual(len(sh.started), 1, out)
+        self.assertIn("merged origin/main into impl/implementation-gs-srv-001", out)
+        self.assertEqual(g(work, "rev-parse", "HEAD^1"), before)   # no rewrite: its push still holds
+        self.assertEqual(g(work, "rev-parse", "HEAD^2"), g(self.repo, "rev-parse", "HEAD"))
+
+    def test_a_resumed_branch_that_conflicts_with_main_needs_the_owner(self):
+        work, g = self.behind_main(lane_edits={"lane.txt": "lane work\n"})
+        (self.repo / "lane.txt").write_text("main's own\n")
+        g(self.repo, "add", "lane.txt")
+        g(self.repo, "commit", "-q", "-m", "main touches it too")
+        g(self.repo, "push", "-q", "origin", "main")
+        before = g(work, "rev-parse", "HEAD")
+        sh = FakeShell(SPRINT)
+        code, out, _ = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05",
+                               "--max-lanes", "1", shell=sh)
+        self.assertEqual(sh.started, [], out)
+        self.assertEqual(code, 1)
+        self.assertIn("needs the owner: impl/implementation-gs-srv-001 doesn't rebase cleanly onto origin/main "
+                      "(lane.txt)", out)
+        self.assertEqual(g(work, "rev-parse", "HEAD"), before)    # aborted: left as the lane had it
+        self.assertEqual(g(work, "status", "--porcelain"), "")
+        self.assertFalse((Path(g(work, "rev-parse", "--git-dir")) / "rebase-merge").exists())
+
+    def test_a_resumed_branch_with_uncommitted_changes_isnt_touched(self):
+        work, g = self.behind_main()
+        (work / "lane.txt").write_text("half done\n")
+        sh = FakeShell(SPRINT)
+        code, out, _ = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05",
+                               "--max-lanes", "1", shell=sh)
+        self.assertEqual(sh.started, [], out)
+        self.assertIn("has uncommitted changes", out)
+        self.assertEqual((work / "lane.txt").read_text(), "half done\n")
+
     def test_worktrees_are_ignored_by_the_repo(self):
         self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05", "--max-lanes", "1")
         status = subprocess.run(["git", "status", "--porcelain"], cwd=self.repo, capture_output=True, text=True)

@@ -1219,8 +1219,38 @@ def setup_worktree(ctx: Ctx, lane: dict, sid: str) -> tuple[Path, bool]:
             raise CoordError(f"{path} has uncommitted work or commits origin/main doesn't: resume it "
                              f"(the story is in-progress), or `coordinator clean` once it's carried")
         host.git(path, "switch", "--detach", "refs/remotes/origin/main", "--quiet", check=True)
+    else:
+        catch_up(host, path)
     host.put_role(sid, resolved, pinned=True)   # `role set/clear` refuse a pinned session
     return path, fresh
+
+
+def catch_up(host, wt: Path) -> None:
+    """Bring a resumed lane's branch up to origin/main before the lane starts: rebase it while it's
+    unpushed, merge origin/main once it's pushed (a lane never force-pushes). A lane could run either
+    itself, but its worktree also runs the branch's own vendored hook, and a deny from either copy
+    wins: a branch cut before lanes could catch up gets an older hook that refuses both. Caught up
+    here, the lane starts on the current .claude/. A conflict is the owner's to resolve."""
+    branch = host.git(wt, "branch", "--show-current").stdout.strip()
+    behind = host.git(wt, "rev-list", "--count", "HEAD..refs/remotes/origin/main").stdout.strip()
+    if not branch or behind in ("", "0"):
+        return
+    behind_by = f"{behind} commit{'' if behind == '1' else 's'} behind"
+    if host.git(wt, "status", "--porcelain", "--untracked-files=no").stdout.strip():
+        raise CoordError(f"needs the owner: {branch} is {behind_by} origin/main and {wt} has "
+                         f"uncommitted changes, so it can't be brought up to date: commit or discard them")
+    pushed = host.git(wt, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}").returncode == 0
+    sub, how = ("merge", ["--no-edit"]) if pushed else ("rebase", [])
+    r = host.git(wt, sub, *how, "refs/remotes/origin/main")
+    if r.returncode == 0:
+        print(f"{'merged origin/main into' if pushed else 'rebased onto origin/main:'} {branch} "
+              f"({behind_by})")
+        return
+    files = host.git(wt, "diff", "--name-only", "--diff-filter=U").stdout.split()
+    host.git(wt, sub, "--abort")
+    raise CoordError(f"needs the owner: {branch} doesn't {sub} cleanly onto origin/main"
+                     + (f" ({names_shown(files)})" if files else "")
+                     + f"; bring it up to date by hand in {wt}, then resume it")
 
 
 PLAIN_NAME = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._/@+-]*")   # a branch or path the report may show as is
