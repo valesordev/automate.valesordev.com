@@ -106,6 +106,14 @@ class LaneConfigTest(unittest.TestCase):
                                                  escalated, someone_else, verified]),
                          ["A-1", "A-3", "A-5", "A-8", "A-9", "A-11", "A-10"])
 
+    def test_a_question_from_the_coordinator_is_answered_to_the_owner(self):
+        q = "sre"
+        asked = st("A-1", comments=[note(q, "coordinator")])
+        answered = st("A-2", comments=[note(q, "coordinator"), note("owner", q, "keys added in #12")])
+        to_coordinator = st("A-3", comments=[note(q, "coordinator"), note("coordinator", q)])
+        elsewhere = st("A-4", comments=[note(q, "coordinator"), note("architecture", q)])
+        self.assertEqual(coord.questions_for(q, [asked, answered, to_coordinator, elsewhere]), ["A-1", "A-3", "A-4"])
+
     def test_comments_without_an_author_marker_fall_back_to_the_last_handoff(self):
         q = "visual-designer"
         old_open = st("A-1", comments=[note(q)])
@@ -738,6 +746,52 @@ class RunTest(unittest.TestCase):
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = coord.main(list(args), gh=self.gh, sh=shell, claude="claude-fake")
         return code, out.getvalue() + err.getvalue(), shell
+
+    def comment(self, *args, env=None):
+        with mock.patch.dict(os.environ, env or {}):
+            for k in ("CLAUDE_SESSION_ID", "COORDINATOR_LANE"):
+                if k not in (env or {}):
+                    os.environ.pop(k, None)
+            return self.go("comment", "GS-SRV-001", *args)
+
+    def test_comment_posts_for_a_role_as_the_coordinator(self):
+        code, out, _ = self.comment("--to", "sre", "--body", "chart keys are missing: see PR #9")
+        self.assertEqual(code, 0, out)
+        self.assertIn("GS-SRV-001: comment posted (**For sre:**)", out)
+        self.assertEqual(self.gh.comments[1][-1],
+                         "**For sre:** chart keys are missing: see PR #9\n\n<!-- from: coordinator -->")
+        body = Path(self.tmp.name) / "note.md"
+        body.write_text("line one\nline two\n")
+        code, out, _ = self.comment("--to", "sre", "--body-file", str(body))
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.gh.comments[1][-1].startswith("**For sre:**\n\nline one\nline two"))
+
+    def test_comment_works_from_a_role_free_session_and_under_role_none(self):
+        code, out, _ = self.comment("--to", "sre", "--body", "x", env={"CLAUDE_SESSION_ID": "dispatcher"})
+        self.assertEqual(code, 0, out)
+        coord.role.put_role(self.repo, "owner-s", "none")
+        code, out, _ = self.comment("--to", "sre", "--body", "x", env={"CLAUDE_SESSION_ID": "owner-s"})
+        self.assertEqual(code, 0, out)
+
+    def test_comment_is_refused_in_a_lane_and_in_a_role_session(self):
+        before = len(self.gh.comments.get(1, []))
+        code, out, _ = self.comment("--to", "sre", "--body", "x", env={"COORDINATOR_LANE": "implementation-1"})
+        self.assertEqual(code, 2)
+        self.assertIn("a lane posts with `story comment`", out)
+        coord.role.put_role(self.repo, "impl-s", "implementation")
+        code, out, _ = self.comment("--to", "sre", "--body", "x", env={"CLAUDE_SESSION_ID": "impl-s"})
+        self.assertEqual(code, 2)
+        self.assertIn("this session's role is implementation", out)
+        self.assertEqual(len(self.gh.comments.get(1, [])), before)
+
+    def test_comment_needs_a_real_role_and_a_body(self):
+        code, out, _ = self.comment("--to", "nobody", "--body", "x")
+        self.assertEqual(code, 2)
+        self.assertIn("no role 'nobody'", out)
+        code, out, _ = self.comment("--to", "none", "--body", "x")
+        self.assertEqual(code, 2)
+        code, out, _ = self.comment("--to", "sre", "--body", "  ")
+        self.assertIn("give --body or --body-file", out)
 
     def test_plan_lists_lanes_and_what_everything_else_waits_on(self):
         code, out, _ = self.go("plan", "--roles", "implementation")
