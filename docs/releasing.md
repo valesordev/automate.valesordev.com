@@ -42,7 +42,7 @@ It reads the agent-config repo and target from `.claude/.automate.json`, fetches
 
 It refuses a dirty tree, a `main` that differs from `origin/main`, an unsigned or untrusted tag, and an existing branch of the same name. Already at the tag, it commits nothing. `install` refuses to overwrite a managed file edited in the repo: move that change into the agent-config repo first (a PR, then a new tag), or drop it in the repo. A refused install commits nothing; `git checkout -- .claude .github` puts the tree back.
 
-The repo's Makefile needs one line, which install doesn't write; see the [plugin README](../plugins/valesor-dev/README.md#install). An install recorded before `repo` was (before `valesor-dev` 0.26.0) needs `--repo` once: `.claude/bin/update-agents v<…> --repo <owner>/<name>`.
+The repo's Makefile needs one line, which install doesn't write; see the [toolkit README](../toolkit/README.md#update-agents). Every install writes the script, whatever the target's plugins. An install recorded before `repo` was (before `v0.5.0`) needs `--repo` once: `.claude/bin/update-agents v<…> --repo <owner>/<name>`.
 
 ## 3. Agent-config repos
 

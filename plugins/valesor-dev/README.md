@@ -12,19 +12,7 @@ Vendor it into a repo, so cloud sessions get it too (they don't load plugins): a
 
 Don't do both in one repo, or its skills and hooks run twice.
 
-**Updating from a tag (`bin/update-agents`).** Once installed, a repo updates itself from a release instead of being installed into from a checkout. `make update-agents REF=<tag>` runs `.claude/bin/update-agents <tag>`, which works from a clean `main` that matches `origin/main`:
-
-1. It reads `repo` and `target` from `.claude/.automate.json`. An install made before the record had `repo` needs `--repo <owner>/<name>` once.
-2. It fetches the tag from that repo and refuses unless `git tag -v` verifies it. Lightweight and unsigned tags are refused, and so are tags signed by a key your git config doesn't trust (for SSH signatures, `gpg.ssh.allowedSignersFile`).
-3. In the fetched copy it runs `make deps` (when there's a `deps.json`), then `make install` and `make check-target` into this repo.
-4. It creates `chore/update-agents-<tag>`, commits `.claude/` and `.github/`, pushes, and opens a PR against `main`. `PR=0` (`--no-pr`) stops after the commit.
-
-A repo already at the tag gets no commit. The install's usual refusals still apply: a managed file edited in the repo stops it before anything is committed. The repo's Makefile needs one line, since install doesn't write it:
-
-```make
-update-agents: ## Update the vendored agents from a signed tag: make update-agents REF=<tag> [PR=0]
-	@.claude/bin/update-agents "$(REF)" $(if $(filter 0,$(PR)),--no-pr)
-```
+**Updating from a tag.** A repo installed from a target updates itself with `make update-agents REF=<tag>`; the toolkit vendors the script into every install. See the [toolkit README](../../toolkit/README.md#update-agents).
 
 ## Roles
 

@@ -15,6 +15,7 @@ are vendored rather than installed:
 
     plugins/<p>/skills/*      -> .claude/skills/*
     plugins/<p>/bin/*         -> .claude/bin/*        (executable)
+    toolkit/update-agents     -> .claude/bin/update-agents  (every install, whatever the plugins)
     plugins/<p>/workflows/*   -> .github/workflows/*  (GitHub Actions; install refuses to
                                  replace a workflow it doesn't manage)
     plugins/<p>/hooks/hooks.json -> merged into .claude/settings.json
@@ -45,6 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sources import Sources, origin, repo_root, tag_at_head  # noqa: E402
 
 MANIFEST = ".claude/.automate.json"
+# Install plumbing every repo gets, whatever its plugins: {dest path: toolkit file}.
+TOOLKIT_FILES = {".claude/bin/update-agents": Path(__file__).resolve().parent / "update-agents"}
 
 
 def sha(p: Path | bytes) -> str:
@@ -98,6 +101,10 @@ def plan(sources: Sources, target: str) -> tuple[dict[str, bytes], dict]:
             raw = hj.read_text().replace("${CLAUDE_PLUGIN_ROOT}", "${CLAUDE_PROJECT_DIR}/.claude")
             for event, groups in json.loads(raw).get("hooks", {}).items():
                 hooks.setdefault(event, []).extend(groups)
+    for rel, src in TOOLKIT_FILES.items():
+        if rel in files:
+            raise SystemExit(f"install: a plugin ships {rel}, which the toolkit installs itself; remove it")
+        files[rel] = src.read_bytes()
     rdir = tdir / cfg.get("roles", "roles")
     if rdir.is_dir():
         for f in sorted(rdir.glob("*.md")):

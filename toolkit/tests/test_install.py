@@ -21,7 +21,7 @@ class InstallTest(ToolkitCase):
                     ".claude/roles/_repo.md", ".claude/roles/dev.md", ".claude/roles/lead.md",
                     ".github/workflows/flow.yml"):
             self.assertTrue((self.dest / rel).is_file(), rel)
-        for rel in (".claude/bin/tool", ".claude/bin/up"):
+        for rel in (".claude/bin/tool", ".claude/bin/up", ".claude/bin/update-agents"):
             self.assertTrue(os.access(self.dest / rel, os.X_OK), rel)
         self.assertFalse((self.dest / ".claude/skills/do-thing/src").exists())
         cmd = self.settings()["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
@@ -34,6 +34,17 @@ class InstallTest(ToolkitCase):
         lead = (self.dest / ".claude/roles/lead.md").read_text()
         self.assertLess(lead.index("Lead base body."), lead.index("Lead in the demo repo."))
         self.assertIn("Assist level: L3", lead)
+
+    def test_update_agents_comes_from_the_toolkit_whatever_the_plugins(self):
+        self.assertEqual((self.dest / ".claude/bin/update-agents").read_bytes(),
+                         (TOOLKIT / "update-agents").read_bytes())
+        self.assertIn(".claude/bin/update-agents", self.manifest["files"])
+
+    def test_a_plugin_shipping_update_agents_is_refused(self):
+        (self.home / "plugins/tools/bin/update-agents").write_text("#!/bin/sh\n")
+        r = self.install()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("which the toolkit installs itself", r.stderr + r.stdout)
 
     def test_manifest_records_the_source_repo_and_its_tag(self):
         self.assertNotIn("repo", self.manifest)              # no origin remote

@@ -58,7 +58,7 @@ Until a role is set, the hooks deny edits inside the repo. See [Working in a rol
 
 1. Change the source here (`plugins/valesor-dev/` or `targets/<repo>/`), then `make validate test`.
 2. Tag a release here (a signed tag).
-3. In the repo, on `main`: `make update-agents REF=<tag>`. It fetches the tag, verifies its signature, installs the repo's target, and opens a `chore/update-agents-<tag>` PR (`PR=0` stops at the commit). The repo's Makefile needs the one-line target in the [plugin README](../plugins/valesor-dev/README.md#install).
+3. In the repo, on `main`: `make update-agents REF=<tag>`. It fetches the tag, verifies its signature, installs the repo's target, and opens a `chore/update-agents-<tag>` PR (`PR=0` stops at the commit). The repo's Makefile needs the one-line target in the [toolkit README](../toolkit/README.md#update-agents).
 
 Before a repo has `update-agents` (or for a change you haven't tagged), install from a checkout here instead: on a `chore/` branch in the repo, `make install TARGET=<repo> DEST=<path>`, commit `.claude/` and `.github/`, open a PR.
 

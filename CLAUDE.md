@@ -21,12 +21,12 @@ Help the owner move projects forward, build lasting skills while doing it, and u
 ├── CLAUDE.md                         # this file
 ├── docs/                             # usage docs: getting started, working in a role, role catalog (exported to the docs site)
 ├── Makefile                          # validate / check-public / tools / test / build / package / install / check-target / docs-export / mirror / cutover / dev
-├── toolkit/                          # install, render, check_conventions, check_public, tools, package, scaffold, export_docs (+ sources.py); its own fixture tests
+├── toolkit/                          # install, render, check_conventions, check_public, tools, package, scaffold, export_docs, update-agents (+ sources.py); its own fixture tests
 ├── plugins/valesor-dev/
 │   ├── .claude-plugin/plugin.json
 │   ├── README.md                     # roles + assist levels, hooks, coordinator, lanes: the long-form docs
 │   ├── skills/<skill>/SKILL.md       # + references/
-│   ├── bin/                          # role, story, sprint-state, project-mirror, coordinator, codex-review, update-agents
+│   ├── bin/                          # role, story, sprint-state, project-mirror, coordinator, codex-review
 │   ├── hooks/hooks.json              # uses ${CLAUDE_PLUGIN_ROOT}
 │   ├── roles/<name>.md               # base charters (product, sre, visual-designer) that target roles `extends`
 │   └── workflows/                    # GitHub Actions vendored to a target's .github/workflows/
