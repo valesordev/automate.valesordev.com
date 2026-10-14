@@ -634,6 +634,15 @@ REAL_UID_IN_USE, REAL_STRAYS = coord.uid_in_use, coord.strays   # RunTest stubs 
 _KEYS = tempfile.TemporaryDirectory()   # one RSA key for every test: openssl genrsa is the slow part
 
 
+def lane_git_config(env: dict, key: str) -> list[str]:
+    """key's values as git reads them in a lane, run the way buf runs git: empty variables dropped,
+    and none of your own config."""
+    env = {k: v for k, v in env.items() if v} | {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    r = subprocess.run(["git", "config", "--get-all", key], capture_output=True, text=True, env=env,
+                       cwd="/", check=True)
+    return r.stdout.splitlines()
+
+
 def app_key() -> Path:
     key = Path(_KEYS.name) / "app.pem"
     if not key.exists():
@@ -2394,12 +2403,15 @@ Assist level: L2 — drafts brand docs; the owner decides.
         fake_gh.chmod(0o755)
 
         def probe(sh, cwd, cmd, env):   # what the lane's own gh and git see while it runs
-            helper = env["GIT_CONFIG_VALUE_3"]
+            helper = lane_git_config(env, "credential.https://github.com.helper")[-1]
             seen["git"] = subprocess.run([helper, "get"], input="protocol=https\nhost=github.com\n\n",
                                          capture_output=True, text=True, env=env).stdout
             seen["gh"] = subprocess.run(["gh", "pr", "view"], capture_output=True, text=True, env=env, cwd=cwd).stdout
             seen["store"] = subprocess.run([helper, "store"], input="password=x\n", capture_output=True,
                                            text=True, env=env).stdout
+            seen["insteadof"] = lane_git_config(env, "url.https://github.com/.insteadof")
+            seen["helper"] = lane_git_config(env, "credential.https://github.com.helper")
+            seen["cfgmode"] = Path(env["GIT_CONFIG_VALUE_0"]).stat().st_mode & 0o777
             tok = Path(helper).parent.parent / "token"
             seen["mode"] = tok.stat().st_mode & 0o777
             seen["tok"] = tok
@@ -2413,11 +2425,13 @@ Assist level: L2 — drafts brand docs; the owner decides.
         auth = Path(env["PATH"].split(os.pathsep)[0]).parent
         self.assertEqual(auth.parent.parent.name, "runs")
         self.assertEqual(Path(env["GH_CONFIG_DIR"]), auth / "gh-config")
-        cfg = {env[f"GIT_CONFIG_KEY_{i}"]: [] for i in range(int(env["GIT_CONFIG_COUNT"]))}
-        for i in range(int(env["GIT_CONFIG_COUNT"])):
-            cfg[env[f"GIT_CONFIG_KEY_{i}"]].append(env[f"GIT_CONFIG_VALUE_{i}"])
-        self.assertEqual(cfg["url.https://github.com/.insteadof"], ["git@github.com:", "ssh://git@github.com/"])
-        self.assertEqual(cfg["credential.https://github.com.helper"], ["", str(auth / "bin/git-credential-lane")])
+        self.assertEqual((env["GIT_CONFIG_COUNT"], env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"]),
+                         ("1", "include.path", str(auth / "gitconfig")))
+        self.assertEqual(seen["cfgmode"], 0o600)
+        # a tool that drops empty variables (buf, running git) still gets every entry: none is empty
+        self.assertFalse([k for k, v in env.items() if k.startswith("GIT_CONFIG") and not v])
+        self.assertEqual(seen["insteadof"], ["git@github.com:", "ssh://git@github.com/"])
+        self.assertEqual(seen["helper"], ["", str(auth / "bin/git-credential-lane")])
         self.assertEqual(seen["git"], "username=x-access-token\npassword=ghs_1\n")
         self.assertEqual(seen["gh"], "ghs_1 pr view\n")
         self.assertEqual((seen["store"], seen["mode"]), ("", 0o600))
@@ -2545,7 +2559,7 @@ Assist level: L2 — drafts brand docs; the owner decides.
         seen = {}
 
         def probe(sh, cwd, cmd, env):   # the lane's files while it runs
-            auth = Path(env["GIT_CONFIG_VALUE_3"]).parent.parent
+            auth = Path(env["GIT_CONFIG_VALUE_0"]).parent
             seen.update(token=oct((auth / "token").stat().st_mode & 0o777),
                         bin=oct((auth / "bin").stat().st_mode & 0o777),
                         envfiles=sorted(f.name for f in auth.parent.glob("env-*.json")),

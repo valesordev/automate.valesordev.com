@@ -1571,6 +1571,22 @@ def git_auth(auth: Path) -> list[tuple[str, str]]:
             ("credential.https://github.com.helper", str(auth / "bin" / "git-credential-lane"))]
 
 
+def git_config_text(cfg: list[tuple[str, str]]) -> str:
+    """cfg as a git config file. A lane's environment carries only `include.path` to it: a tool that
+    drops empty variables when it runs git (buf does) would take the helper reset's "" with it, and
+    git refuses a GIT_CONFIG_COUNT with a value missing. Keys are <section>.<subsection>.<name>."""
+    out, section = [], None
+    for key, value in cfg:
+        sec, rest = key.split(".", 1)
+        sub, name = rest.rsplit(".", 1)
+        if (sec, sub) != section:
+            section = (sec, sub)
+            out.append(f'[{sec} "{sub}"]')
+        quoted = value.replace("\\", "\\\\").replace('"', '\\"')
+        out.append(f'\t{name} = "{quoted}"')
+    return "\n".join(out) + "\n"
+
+
 def lane_auth_files(token: LaneToken, lane_dir: Path, shared: bool = False) -> None:
     """The token file, and a `gh` and git credential helper that read it on every call, in
     <lane dir>/auth/. The private key stays out of a lane's environment. `shared`: the lane user
@@ -1589,6 +1605,8 @@ def lane_auth_files(token: LaneToken, lane_dir: Path, shared: bool = False) -> N
     for name, text in files.items():
         (auth / "bin" / name).write_text(text)
         (auth / "bin" / name).chmod(0o750 if shared else 0o700)
+    (auth / "gitconfig").write_text(git_config_text(git_auth(auth)))
+    (auth / "gitconfig").chmod(0o640 if shared else 0o600)
 
 
 def run_lane(ctx: Ctx, lane: dict, run_id: str, run_dir: Path, lane_dir: Path, args, pending: list) -> None:
@@ -1611,10 +1629,8 @@ def run_lane(ctx: Ctx, lane: dict, run_id: str, run_dir: Path, lane_dir: Path, a
     if token:   # the lanes' app for gh and for git pushes over HTTPS, never your account or your SSH key
         env.pop("GITHUB_TOKEN", None)
         env.pop("GH_TOKEN", None)
-        cfg = git_auth(auth)
-        env["GIT_CONFIG_COUNT"] = str(len(cfg))
-        for i, (k, v) in enumerate(cfg):
-            env[f"GIT_CONFIG_KEY_{i}"], env[f"GIT_CONFIG_VALUE_{i}"] = k, v
+        env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="include.path",
+                   GIT_CONFIG_VALUE_0=str(auth / "gitconfig"))   # not the entries: see git_config_text
     env = host.lane_env(env, auth)
     # Between the process existing and the run owning it, a signal must wait: the handler
     # below only notes it, and it is raised once the lane is in `pending` (or has been stopped).
