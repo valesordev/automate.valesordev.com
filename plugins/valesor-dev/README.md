@@ -78,6 +78,7 @@ For a repo with a Project (`project:` in `_repo.md`), `bin/story` is how role se
 | `story body <ID> --body-file F` | replaces the contract (issue body) | `story_edits: [body]` |
 | `story comment <ID> (--to ROLE \| --record NAME) (--body … \| --body-file F)` | `**For <role>:**` or `**<record> (<role>):**` comment | any role |
 | `coordinator comment <ID> --to ROLE (--body … \| --body-file F)` | `**For <role>:**` comment stamped `from: coordinator` | the role-free dispatcher session, `/role none`, or a terminal; never a lane or a role session |
+| `coordinator file-issues <run-id> [--lane NAME] [--apply]` | the run's drafted config-failure issues, shown; with `--apply`, filed in the installing repo | the owner; never a lane |
 | `story merged <PR>` | the story-merge Action: applies a merged PR's `Story:` / `Story-Done:` lines | the PR's single `role:<role>` label, with that role's `transitions:` plus `on_merge:` |
 
 The session's role comes from `--sid` or `$CLAUDE_SESSION_ID`, which the SessionStart hook exports through `CLAUDE_ENV_FILE`. `/role none` may do anything, and with no role set, writes are refused. The Bash hook denies raw writes in role sessions and asks under `/role none`:
@@ -113,6 +114,13 @@ Like the review gate, it's a parser and guards what it can see.
 ## Coordinator (`bin/coordinator`, `/sprint-run`)
 
 **Handing a role something from the dispatcher.** The session that runs the coordinator stays role-free, and with no role `story` refuses every write. `coordinator comment <ID> --to <role> --body-file F` posts the `**For <role>:**` comment `story comment --to` would, stamped `from: coordinator`. It refuses inside a lane (`COORDINATOR_LANE`) and in a session holding any role but `none`, which post as themselves with `story comment`, so no lane or role can post as the coordinator. The role answers `--to owner`.
+
+**When the agent setup stops a lane.** Some lanes fail because of the setup, not their story: a hook or the permission mode denies what the charter or a skill asks, a skill step can't work in a lane, or the lane's environment lacks a tool. Such a lane ends with `LANE RESULT: blocked: config: <what stopped it>`, and its prompt tells it to. The run then drafts an issue for it, and does the same for any lane that was refused a tool call and didn't finish. A lane that finished despite a denial, or one blocked by its story, gets nothing. The draft fills the *Skill refinement* fields from what the run saw:
+- the result line;
+- each refused command or file;
+- the lane's last message, with the worktree, scratch, checkout and home paths replaced by placeholders, and every `$AUTOMATE_DENYLIST` term (the file `check-public` reads) replaced by `[redacted]`.
+
+Expected and Proposed are left for you. Drafts go in `runs/<id>/issues/`, one per fingerprint (the role and what was refused), and the report lists them. Nothing leaves the machine until you say so. `coordinator file-issues <run-id>` prints them for review, and warns when no denylist is set, since a lane's words can name people. `--apply` files them in the repo the agents were installed from (`repo` in `.claude/.automate.json`), with `kind:bug`, `source:session` and `plugin:<target>`, each only where that repo has the label. An open issue that carries the same fingerprint gets a "seen again" comment instead of a duplicate. Filed links are added to the run's report.
 
 `coordinator plan|run|status|handoff|clean|comment` runs a sprint's role lanes in parallel. It is a script, not a model. It reads the board (`sprint-state`, the Project items, blocked-by links) and decides which lanes can start:
 

@@ -468,6 +468,9 @@ class FakeShell(coord.Shell):
         self.issues = issues if issues is not None else []
         self.merged_prs, self.issues_fail = merged_prs or [], issues_fail
         self.handoffs_opened = {n: 1 for n in (handoffs_opened or ())}      # PR number -> issues opened
+        self.repo_labels = ["kind:bug", "source:session", "plugin:game-server", "wontfix"]
+        self.repo_issues: list[dict] = []    # in the automation repo `file-issues` files into
+        self.repo_calls: list[list[str]] = []
         self.search_fail = search_fail
         self.handoff_lag = handoff_lag
         self.wt_adds = 0
@@ -535,6 +538,24 @@ class FakeShell(coord.Shell):
         if cmd[0] == "gh" and cmd[1:3] == ["pr", "comment"]:
             self.pr_comments.append(cmd[3:])
             return done()
+        if cmd[0] == "gh" and "--repo" in cmd or cmd[:3] == ["gh", "issue", "comment"]:
+            self.repo_calls.append(cmd)
+            if cmd[1:3] == ["label", "list"]:
+                return done(json.dumps([{"name": n} for n in self.repo_labels]))
+            if cmd[1:3] == ["issue", "list"]:
+                q = cmd[cmd.index("--search") + 1].split('"')[1]
+                return done(json.dumps([{"number": i["number"], "url": i["url"]} for i in self.repo_issues
+                                        if q in i["body"]][:1]))
+            if cmd[1:3] == ["issue", "create"]:
+                n = 100 + len(self.repo_issues)
+                url = f"https://gh/{cmd[cmd.index('--repo') + 1]}/issues/{n}"
+                labels = [cmd[i + 1] for i, x in enumerate(cmd) if x == "--label"]
+                self.repo_issues.append({"number": n, "url": url, "title": cmd[cmd.index("--title") + 1],
+                                         "body": Path(cmd[cmd.index("--body-file") + 1]).read_text(),
+                                         "labels": labels})
+                return done(url + "\n")
+            if cmd[1:3] == ["issue", "comment"]:
+                return done()
         if cmd[0] == "gh" and cmd[1:3] == ["search", "issues"]:
             if self.search_fail:
                 return done("", 1)
@@ -726,6 +747,10 @@ class RunTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.left, self.uid_taken = [], None
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("AUTOMATE_DENYLIST", None)   # yours: drafts in tests redact only what a test sets
         for k in [k for k in os.environ if k.startswith(("AGENTO11Y_", "SIGIL_"))]:   # yours: not the tests'
             del os.environ[k]
         for p in (mock.patch.dict(os.environ, {"COORDINATOR_APP_CONFIG": str(self.app_cfg)}),
@@ -871,6 +896,107 @@ class RunTest(unittest.TestCase):
         row = next(l for l in out.splitlines() if l.startswith("| implementation-gs-srv-001"))
         self.assertIn("| ready |", row)
         self.assertNotIn("unreadable", out)
+
+    def blocked_run(self, result, denials=(), make_pr=False, repo="acme/automate.acme.com"):
+        """A run whose one lane ends with `result` after being refused `denials` (Bash commands,
+        `{wt}` standing for its worktree). Returns the run's output, shell and runs/<id>/."""
+        rec = self.repo / ".claude/.automate.json"
+        data = json.loads(rec.read_text())
+        data.pop("repo", None)
+        rec.write_text(json.dumps({**data, **({"repo": repo} if repo else {}), "target": "game-server"}))
+        wt = self.wt("implementation-gs-srv-001")
+        sh = FakeShell(SPRINT, make_pr=make_pr, claude_json={
+            "result": f"I tried, and stopped at {wt}/Makefile.\nLANE RESULT: {result}", "is_error": False,
+            "total_cost_usd": 1.0, "num_turns": 9,
+            "permission_denials": [{"tool_name": "Bash", "tool_use_id": f"t{i}",
+                                    "tool_input": {"command": d.format(wt=wt)}} for i, d in enumerate(denials)]})
+        code, out, sh = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05",
+                                "--max-lanes", "1", shell=sh)
+        runs = sorted((self.repo / ".git/claude-coordinator/runs").iterdir())
+        return out, sh, runs[-1]
+
+    def test_a_lane_the_setup_stops_gets_an_issue_drafted(self):
+        out, sh, run = self.blocked_run("blocked: config: buf can't clone the repo",
+                                        ["git rebase origin/main", "make -C {wt} check | tail -5"])
+        self.assertIn("## Drafted issues", out)
+        self.assertIn(f"`coordinator file-issues {run.name}`", out)
+        self.assertIn("For acme/automate.acme.com", out)
+        d = json.loads((run / "issues/implementation-gs-srv-001.json").read_text())
+        self.assertEqual(d["title"], "coordinator lane (implementation): buf can't clone the repo")
+        self.assertIn("Bash: git rebase origin/main\nBash: make -C <worktree> check | tail -5", d["body"])
+        self.assertIn("stopped at <worktree>/Makefile", d["body"])
+        self.assertNotIn(str(self.repo), d["body"])   # no machine paths: the issue may be public
+        self.assertIn("### Observed behavior", d["body"])
+        self.assertIn(f"<!-- coordinator-issue: {d['fingerprint']} -->", d["body"])
+        self.assertEqual(sh.repo_calls, [])            # drafted only: filing is the owner's yes
+
+    def test_drafts_redact_the_owners_denylist(self):
+        deny = Path(self.tmp.name) / "denylist"
+        deny.write_text("# names\nPat Example\nre:build-host-\\d+\n")
+        with mock.patch.dict(os.environ, {"AUTOMATE_DENYLIST": str(deny)}):
+            out, sh, run = self.blocked_run("blocked: config: asked pat  example on build-host-7",
+                                            ["ssh build-host-7 make check"])
+        d = json.loads((run / "issues/implementation-gs-srv-001.json").read_text())
+        self.assertEqual(d["title"], "coordinator lane (implementation): asked [redacted] on [redacted]")
+        self.assertNotIn("build-host-7", d["body"])
+        self.assertIn("Bash: ssh [redacted] make check", d["body"])
+        code, out, _ = self.go("file-issues", run.name, shell=sh)
+        self.assertIn("No AUTOMATE_DENYLIST is set", out)   # the owner reads before filing
+
+    def test_a_refused_lane_is_drafted_without_saying_config(self):
+        out, sh, run = self.blocked_run("blocked: make bootstrap was denied", ["make bootstrap"])
+        self.assertTrue((run / "issues/implementation-gs-srv-001.json").exists(), out)
+
+    def test_story_blockers_and_finished_lanes_draft_nothing(self):
+        out, _, run = self.blocked_run("blocked: AW-SRV-054 has to land first")
+        self.assertNotIn("Drafted issues", out)
+        self.assertFalse((run / "issues").exists())
+        shutil.rmtree(self.wt("implementation-gs-srv-001"))
+        subprocess.run(["git", "worktree", "prune"], cwd=self.repo, check=True)
+        self.set_status("GS-SRV-001", "ready")
+        out, _, run = self.blocked_run("https://gh/pull/1", ["git rebase origin/main"], make_pr=True)
+        self.assertNotIn("Drafted issues", out)        # refused once, and finished anyway
+
+    def test_file_issues_shows_then_files_then_says_filed(self):
+        out, sh, run = self.blocked_run("blocked: config: buf can't clone the repo", ["git rebase origin/main"])
+        code, out, _ = self.go("file-issues", run.name, shell=sh)
+        self.assertEqual(code, 0, out)
+        self.assertIn("--- implementation-gs-srv-001 → acme/automate.acme.com", out)
+        self.assertIn("### Sanitized excerpt", out)
+        self.assertEqual(sh.repo_issues, [])
+        code, out, _ = self.go("file-issues", run.name, "--apply", shell=sh)
+        self.assertEqual(code, 0, out)
+        [issue] = sh.repo_issues
+        self.assertEqual(issue["labels"], ["kind:bug", "source:session", "plugin:game-server"])
+        self.assertIn(f"implementation-gs-srv-001: filed {issue['url']}", out)
+        self.assertIn(f"- implementation-gs-srv-001: filed {issue['url']}", (run / "report.md").read_text())
+        code, out, _ = self.go("file-issues", run.name, "--apply", shell=sh)
+        self.assertIn(f"filed already, {issue['url']}", out)
+        self.assertEqual(len(sh.repo_issues), 1)
+
+    def test_file_issues_comments_on_an_open_issue_with_the_same_fingerprint(self):
+        out, sh, run = self.blocked_run("blocked: config: buf can't clone the repo", ["git rebase origin/main"])
+        fp = json.loads((run / "issues/implementation-gs-srv-001.json").read_text())["fingerprint"]
+        sh.repo_issues.append({"number": 7, "url": "https://gh/acme/automate.acme.com/issues/7",
+                               "body": f"earlier\n<!-- coordinator-issue: {fp} -->"})
+        code, out, _ = self.go("file-issues", run.name, "--apply", shell=sh)
+        self.assertEqual(code, 0, out)
+        self.assertIn("seen again on https://gh/acme/automate.acme.com/issues/7", out)
+        self.assertEqual(len(sh.repo_issues), 1)
+        self.assertEqual(sh.repo_calls[-1][:4], ["gh", "issue", "comment", "https://gh/acme/automate.acme.com/issues/7"])
+
+    def test_file_issues_needs_an_installing_repo_and_isnt_a_lanes(self):
+        out, sh, run = self.blocked_run("blocked: config: x", repo=None)
+        self.assertIn("No installing repo is recorded", out)
+        code, out, _ = self.go("file-issues", run.name, "--apply", shell=sh)
+        self.assertEqual(code, 2)
+        self.assertIn("no installing repo", out)
+        with mock.patch.dict(os.environ, {"COORDINATOR_LANE": "implementation-x"}):
+            code, out, _ = self.go("file-issues", run.name, shell=sh)
+        self.assertEqual(code, 2)
+        self.assertIn("is the owner's", out)
+        code, out, _ = self.go("file-issues", "../../etc", shell=sh)
+        self.assertEqual(code, 2)
 
     def test_resuming_a_story_reuses_the_lanes_worktree(self):
         self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05", "--max-lanes", "1")
