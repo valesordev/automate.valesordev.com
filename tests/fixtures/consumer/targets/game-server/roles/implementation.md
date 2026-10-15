@@ -1,5 +1,6 @@
 ---
 role: implementation
+summary: Server code to the story contract | tested
 aliases: [impl, dev]
 branch_prefix: impl/
 writes: [server/, internal/, cmd/, admin/, content/, agents/, client/, testdata/, docs/glossary.md]

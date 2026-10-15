@@ -1,5 +1,6 @@
 ---
 role: pm
+summary: Sprint plans, groomed stories, and sprint close-outs
 aliases: [project-management, project-manager]
 branch_prefix: pm/
 writes: [docs/sprints/, docs/roadmap.md, docs/glossary.md]

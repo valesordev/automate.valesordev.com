@@ -1,5 +1,6 @@
 ---
 role: product
+summary: The product plan: vision, releases, features, and product-issue triage
 extends: product
 aliases: [product-manager, po]
 branch_prefix: product/

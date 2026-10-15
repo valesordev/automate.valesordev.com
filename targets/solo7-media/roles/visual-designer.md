@@ -1,5 +1,6 @@
 ---
 role: visual-designer
+summary: Brand audits, brand docs, art direction, generated artwork, tokens, and specs
 extends: visual-designer
 aliases: [design, vd, brand]
 branch_prefix: design/

@@ -1,5 +1,6 @@
 ---
 role: implementation
+summary: Components and pages built to the brand docs, and verified
 aliases: [impl, dev]
 branch_prefix: impl/
 writes: ["brands/*/components/*", sites/, packages/, "!sites/*/wrangler.jsonc", "!packages/site-core/instrumentation/", docs/glossary.md]

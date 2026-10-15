@@ -1,5 +1,6 @@
 ---
 role: architecture
+summary: ADRs, specs, and story contracts; reviews the other roles' work
 aliases: [arch]
 branch_prefix: arch/
 writes: [docs/adr/, docs/specs/, "!docs/specs/slo/", docs/glossary.md, package.json, tsconfig.base.json]

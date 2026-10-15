@@ -1,5 +1,6 @@
 ---
 role: sre
+summary: CI, previews, Cloudflare deploys, observability, and SLOs
 extends: sre
 aliases: [ops, reliability]
 branch_prefix: sre/
