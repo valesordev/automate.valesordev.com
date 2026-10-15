@@ -2,7 +2,7 @@
 
 ## One session, one role
 
-Start Claude Code in the repo and run `/role <name>` first. It records the role for the session and loads the charter: the base role (if the file `extends` one), then the repo's own text. `/role` alone shows the current role; `/role none` is an unrestricted session. Switching roles means a new session (`/clear`).
+Start Claude Code in the repo and run `/role <name>` first. It records the role for the session and loads the charter: the base role (if the file `extends` one), then the repo's own text. `/role` alone shows the current role; `/role help` prints what each role here is for (aliases, assist level, summary, skills); `/role none` is an unrestricted session. Switching roles means a new session (`/clear`).
 
 - **Local:** `/role <name>` moves the session into its own worktree (`.claude/worktrees/role-<role>-<id>`, branched from `origin/main`), so the checkout you launched from stays yours. Run several roles in parallel from one clone.
 - **Cloud:** start a session on the repo and send `/role <name>` as the first message. There's no worktree; the session is the clone. Needs `git` and `python3` (both are in the cloud image).

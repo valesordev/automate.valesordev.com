@@ -86,7 +86,7 @@ Rules:
 ### Roles
 
 - Base roles (`plugins/<p>/roles/<name>.md`) hold the generic charter. A target role file with `extends: <name>` gets the base body followed by its own repo-specific body.
-- A target enables a role only by adding `targets/<t>/roles/<role>.md`, with frontmatter (`role`, `extends`, `aliases`, `branch_prefix`, `writes`, `skills`, `transitions`, `story_edits`, …) and a charter.
+- A target enables a role only by adding `targets/<t>/roles/<role>.md`, with frontmatter (`role`, `extends`, `aliases`, `summary`, `branch_prefix`, `writes`, `skills`, `transitions`, `story_edits`, …) and a charter.
 
 ### Tests
 

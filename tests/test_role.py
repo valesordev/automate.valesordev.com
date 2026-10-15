@@ -93,6 +93,24 @@ class RoleTest(unittest.TestCase):
         self.assertEqual(self.decision(str(self.repo / "server/main.go")), "deny")
         self.assertEqual(self.decision("/tmp/scratch.txt"), "allow")
 
+    def test_help_prints_the_role_catalog(self):
+        (self.repo / ".claude/roles/scribe.md").write_text(   # no summary, aliases, skills or level
+            "---\nrole: scribe\nbranch_prefix: scribe/\nwrites: [notes/]\n---\n# Role: SCRIBE\n\n"
+            "## Notes\n\nAssist level: L1 — after the first section, so not declared.\n")
+        r = run(self.role, "help", cwd=self.repo)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        rows = r.stdout.splitlines()
+        self.assertEqual(rows[:2], ["| Role | Aliases | Assist level | Summary | Skills |", "|---|---|---|---|---|"])
+        impl = next(l for l in rows if l.startswith("| `implementation` |"))
+        self.assertTrue(impl.startswith("| `implementation` | impl, dev | L2 Pair | "
+                                        "Server code to the story contract \\| tested | "), impl)
+        self.assertIn("impl-start-sprint", impl)
+        self.assertIn("| `scribe` | — | — | — | — |", rows)
+        self.assertTrue(rows[-1].startswith("| `none` | — | — | Unrestricted session"), rows[-1])
+        self.assertTrue(all(len(re.findall(r"(?<!\\)\|", l)) == 6 for l in rows), r.stdout)   # escaped | is one cell
+        self.assertEqual(run(self.role, "show", SID, cwd=self.repo).stdout.strip(), "unset")  # nothing set
+        self.assertNotEqual(self.set_role("help").returncode, 0)   # `help` is never a role
+
     def test_set_resolves_alias_and_rejects_unknown(self):
         r = self.set_role("impl")
         self.assertEqual(r.returncode, 0, r.stderr)
