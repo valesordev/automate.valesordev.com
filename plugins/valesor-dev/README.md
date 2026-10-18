@@ -36,13 +36,41 @@ Every role uses `role` (the owner only), `pre-pr`, `pr-comments`, and `project-s
 
 **Role sessions work in a worktree.** `/role <role>` moves the session into its own worktree, so the owner keeps working in the checkout they launched from. `role set` names it `role-<role>-<first 8 characters of the session id>`, records it with the session, and adds `.claude/worktrees/` to the repo's local exclude. The skill then calls Claude Code's EnterWorktree, which branches it from `origin/main` under `.claude/worktrees/`. The role's own branch is created there. There's no worktree for `/role none`, a cloud session (`CLAUDE_CODE_REMOTE`), or a coordinator lane, and a role change inside a worktree keeps the one it has. On resume or compaction, the SessionStart hook says to re-enter the worktree when the session's directory isn't in it. Session state lives in the git common dir, so the role, the review gate and the hooks behave the same there. The coordinator's `clean` and `handoff` never touch `role-*` worktrees. At the session's end, Claude Code asks whether to keep or remove the worktree.
 
+## Tools
+
+A role can name the CLIs it uses for an outside system: `tools: [gcx]` in its frontmatter, or in `_repo.md` for every role. The first is `gcx`, for everything in Grafana Cloud. A tool definition is `tools/<tool>.md` in a plugin (generic, vendored from a pin like base roles) or in `targets/<t>/tools/` (the target's own, or `extends: <tool>` to add notes and `instead_of` patterns to a plugin's). Its frontmatter:
+
+| Key | Meaning |
+|---|---|
+| `tool`, `kind`, `domain` | Its name (the file's), `cli`, and what it is the tool for (`Grafana Cloud`). |
+| `check` | A command that succeeds when the tool is installed (`gcx --version`), run without a shell. |
+| `catalog` | The command that lists its commands (`gcx commands -o json --flat`: JSON objects with `full_path`, or one path per line). Without one, write the snapshot by hand. |
+| `read_verbs`, `always_ask` | Which commands are reads: those whose last word matches a `read_verbs` pattern (`list`, `get-*`), except any under `always_ask` (`gcx api`). Everything else asks. |
+| `instead_of` | `commands` (programs that bypass the tool: `mimirtool`, `logcli`), `bash` (regexes over a command: `curl` against `*.grafana.net`), and `url` (regexes over WebFetch and browser URLs). |
+| `credentials` | Where its credentials live, never their values. |
+
+The body is the tool's usage notes for this repo's agents. It points at the tool's own agent docs (`gcx help-tree`, `gcx agent skills`) rather than copying them.
+
+**Permissions are generated.** Permission rules match a command's start, and gcx puts the verb last (`gcx dashboards list`), so the rules name every command. `make tool-snapshot TOOL=<tool>` needs the CLI: it runs `catalog` and writes `tools/<tool>.commands.txt`, the version and then one command path per line. `make build` doesn't need it: it derives `tools/<tool>.permissions.json` from the snapshot and the definition, and `make check-render` fails when that is stale. So a CLI upgrade is two reviewable diffs, the new commands and the rules they produce. A definition with `extends` can't change the classification: the definition with the snapshot owns it.
+
+**What install does.** For each tool the target names, install writes `.claude/tools/<tool>.md` (the notes) and `.claude/tools/<tool>.json` (domain, check, `instead_of`, and the rules), and merges the rules into `.claude/settings.json`: reads to `allow`, the rest to `ask`. Permission rules are session-wide, so every role gets the reads. An `ask` rule wins over an allow, and it prompts in auto mode too, so a write to the outside system always reaches the owner.
+
+**What a session sees.** The charter (`role set`, SessionStart) lists the session's tools, repo-wide then the role's own: `- Grafana Cloud: gcx (.claude/tools/gcx.md)`. When a tool's `check` fails, the line says `NOT AVAILABLE` and tells the agent to raise it with the owner rather than work around it.
+
+**Advice, not enforcement.** When a Bash command runs one of a session's tools' `instead_of.commands` (in any part of a chain, inside `$(...)`, behind assignments and wrappers) or matches `instead_of.bash`, or a WebFetch or browser navigation matches `instead_of.url`, the hooks add a note to the model's context: use gcx, or say why it can't. They make no permission decision, so the rules decide as they would anyway. A role that doesn't list the tool gets no note. A missing or unreadable `.claude/tools/<tool>.json` gives no note and never fails the hook.
+
+**Lanes.** A lane gets its tools' read rules in its `--allowedTools`; their `ask` rules are denied under `dontAsk`, so a lane never writes to an outside system. The plan refuses a role whose tool rule `lane_allow` would refuse. `coordinator run` runs each lane tool's `check` as the lane user (`sudo -iu <user>`) and warns when it fails. The lane user needs the tool and its own login (`sudo -iu lanes gcx login`), never yours.
+
+MCP servers as tools, and hard denies for `instead_of`, aren't built yet.
+
 ## Hooks
 
 | Event | Command | Effect |
 |---|---|---|
 | `SessionStart` | `role hook-session-start` | Re-injects the charter (and points back to the session's worktree), or asks for `/role` |
 | `PreToolUse` on file tools | `role hook-pre-tool-use` | Enforces the role's `writes` ownership |
-| `PreToolUse` on `Bash` | `role hook-pre-bash` | Git and shell guards (below): deny in every mode. `gh pr create` needs `--label role:<role>`. Review gate (below): deny in a role session, ask under `/role none`, deny with no role set |
+| `PreToolUse` on `Bash` | `role hook-pre-bash` | Git and shell guards (below): deny in every mode. `gh pr create` needs `--label role:<role>`. Review gate (below): deny in a role session, ask under `/role none`, deny with no role set. A note when the command bypasses one of the session's tools (Tools, above) |
+| `PreToolUse` on `WebFetch` and browser navigation (`mcp__.*navigate`) | `role hook-pre-url` | A note when the URL is one a session's tool covers; never a decision |
 
 ## Project board
 

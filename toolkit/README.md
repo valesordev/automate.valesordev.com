@@ -4,10 +4,11 @@ Build, check, and install scripts for agent-config repos: repos of Claude Code p
 
 | Script | Does |
 |---|---|
-| `install.py [--check] <target> <dest>` | Vendors `targets/<target>` into `<dest>/.claude/`: plugin skills, `bin/`, workflows, hooks, role files (`extends` composed), permission entries, and `update-agents`. `--check` reports drift. |
+| `install.py [--check] <target> <dest>` | Vendors `targets/<target>` into `<dest>/.claude/`: plugin skills, `bin/`, workflows, hooks, role files (`extends` composed), the tools roles name (`.claude/tools/<tool>.md` and `.json`, their rules merged into settings), permission entries, and `update-agents`. `--check` reports drift. |
 | `update-agents <tag> [--no-pr]` | Vendored as `.claude/bin/update-agents`: updates the repo it runs in from a signed tag of its agent-config repo. See [update-agents](#update-agents). |
 | `render.py --tree\|--check <plugin>` / `render.py <src> <dst>` | Inlines `{{include path}}` into `plugins/<p>/src/**` renders (`--tree` writes, `--check` fails on stale), or renders one file. |
-| `check_conventions.py` | Authoring conventions: `references/examples.md` per skill, skill upload limits, `Assist level: L<n>` on agents and roles, plugin README roles tables. |
+| `tool_perms.py snapshot <tool>` / `--build` / `--check` | Tool definitions (`plugins/<p>/tools/`, `targets/<t>/tools/`): `snapshot` runs a definition's `catalog` into `<tool>.commands.txt` (needs the CLI); `--build` derives `<tool>.permissions.json` from it (reads to `allow`, the rest to `ask`), and `--check` fails on a stale one. |
+| `check_conventions.py` | Authoring conventions: `references/examples.md` per skill, skill upload limits, `Assist level: L<n>` on agents and roles, plugin README roles tables, tool definitions and the tools targets name. |
 | `package.py [--all\|--done]` | Zips skills changed since the last `--done` for claude.ai upload. |
 | `scaffold.py [--into] <name> <dest>` | New repo, or an existing one, from `scaffolds/<name>/`. |
 | `check_public.py [--denylist FILE\|--no-denylist] [--commits RANGE] [--no-gitleaks]` | The public-readiness gate. Fails on a private Notion link or a denylist entry (`$AUTOMATE_DENYLIST`, outside the repo; whole words or `re:` patterns; hits name the entry's line, never the term) in tracked files, and with `--commits` in those commits' messages and file versions; then `gitleaks git --redact` over the whole history. |

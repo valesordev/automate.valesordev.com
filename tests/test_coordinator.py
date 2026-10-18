@@ -1163,6 +1163,28 @@ class RunTest(unittest.TestCase):
         cmd = sh.started[0]["cmd"]
         self.assertEqual(cmd[cmd.index("--disallowedTools") + 1].split(","), coord.DENY)
 
+    def test_a_lane_gets_its_tools_reads_and_a_warning_for_one_missing(self):
+        code, out, sh = self.go("run", "--apply", "--roles", "sre", "--poll", "0.05", shell=FakeShell(SPRINT))
+        cmd = sh.started[0]["cmd"]
+        allow = cmd[cmd.index("--allowedTools") + 1].split(",")
+        self.assertIn("Bash(gcx dashboards list:*)", allow)          # sre's tool: the reads
+        for never in ("Bash(gcx dashboards delete:*)", "Bash(gcx api:*)", "Bash(gcx:*)"):
+            self.assertNotIn(never, allow)                           # its asks are denied under dontAsk
+        self.assertIn("WARNING: Demo Game deploys: `false` exited 1; lanes that use deployctl can't", out)
+        code, out, sh = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05",
+                                "--max-lanes", "1")
+        cmd = sh.started[0]["cmd"]
+        self.assertNotIn("Bash(gcx dashboards list:*)", cmd[cmd.index("--allowedTools") + 1].split(","))
+
+    def test_a_tool_rule_a_lane_cant_take_stops_the_plan(self):
+        f = self.repo / ".claude/tools/gcx.json"
+        t = json.loads(f.read_text())
+        t["allow"].append("Bash(gcx dashboards list; rm -rf x:*)")
+        f.write_text(json.dumps(t))
+        code, out, _ = self.go("plan", "--roles", "sre", shell=FakeShell(SPRINT))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("a rule its tools allow", out)
+
     def test_a_failed_sre_lane_does_not_stop_it_being_planned_again(self):
         sh = FakeShell(SPRINT, exit_code=3)
         self.go("run", "--apply", "--roles", "sre", "--poll", "0.05", shell=sh)

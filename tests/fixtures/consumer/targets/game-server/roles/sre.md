@@ -5,6 +5,7 @@ aliases: [ops, reliability]
 branch_prefix: sre/
 writes: [deploy/, .github/, Makefile, scripts/, docs/runbooks/, docs/specs/slo/, docs/glossary.md]
 skills: [sre-start-sprint]
+tools: [gcx]
 transitions: [ready>in-progress@lane]
 story_edits: [body]
 on_merge: [in-progress>review@lane]

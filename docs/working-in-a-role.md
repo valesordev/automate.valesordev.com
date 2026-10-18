@@ -31,6 +31,10 @@ A hook on `Bash`:
 
 The hooks guard Claude's tools, not every shell write. Every charter forbids routing around a denial.
 
+## Tools a role uses
+
+A role can name the CLIs it uses for an outside system, such as `gcx` for Grafana Cloud. The charter lists them with a pointer to each tool's notes (`.claude/tools/<tool>.md`), and flags one that isn't installed. The tool's reads are allowed, and everything else it can do asks you first. If the agent reaches the same system another way (`curl` against the stack, `mimirtool`, the browser), a hook reminds it to use the tool, or to say why the tool can't do the job. That reminder is advice, not a block. In a coordinator lane, only the reads are available. The [`valesor-dev` README](../plugins/valesor-dev/README.md#tools) explains how to define a tool.
+
 ## The sprint cycle
 
 For a repo whose stories live on a GitHub Project (`stories: github`, `sprints: project`):

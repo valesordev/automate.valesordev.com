@@ -6,6 +6,7 @@ aliases: [ops, reliability]
 branch_prefix: sre/
 writes: [.github/, Makefile, scripts/, obs/, docs/runbooks/, docs/specs/slo/, "sites/*/wrangler.jsonc", packages/site-core/instrumentation/, docs/glossary.md]
 skills: [sre-start-sprint]
+tools: [gcx]
 transitions: [ready>in-progress@lane]
 story_edits: [body]
 on_merge: [in-progress>review@lane]

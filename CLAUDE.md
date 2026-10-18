@@ -21,7 +21,7 @@ Help the owner move projects forward, build lasting skills while doing it, and u
 ├── CLAUDE.md                         # this file
 ├── docs/                             # usage docs: getting started, working in a role, role catalog (exported to the docs site)
 ├── Makefile                          # validate / check-public / tools / test / build / package / install / check-target / docs-export / mirror / cutover / dev
-├── toolkit/                          # install, render, check_conventions, check_public, tools, package, scaffold, export_docs, update-agents (+ sources.py); its own fixture tests
+├── toolkit/                          # install, render, tool_perms, check_conventions, check_public, tools, package, scaffold, export_docs, update-agents (+ sources.py); its own fixture tests
 ├── plugins/valesor-dev/
 │   ├── .claude-plugin/plugin.json
 │   ├── README.md                     # roles + assist levels, hooks, coordinator, lanes: the long-form docs
@@ -29,6 +29,7 @@ Help the owner move projects forward, build lasting skills while doing it, and u
 │   ├── bin/                          # role, story, sprint-state, project-mirror, coordinator, codex-review
 │   ├── hooks/hooks.json              # uses ${CLAUDE_PLUGIN_ROOT}
 │   ├── roles/<name>.md               # base charters (product, sre, visual-designer) that target roles `extends`
+│   ├── tools/<tool>.md               # tool definitions (gcx) + .commands.txt snapshot + generated .permissions.json
 │   └── workflows/                    # GitHub Actions vendored to a target's .github/workflows/
 ├── targets/<repo>/                   # solo7-media: target.json, settings.json, main-ruleset.json, roles/
 └── tests/                            # plugin and target tests; fixtures/consumer/ holds generic targets
@@ -83,6 +84,11 @@ Rules:
 - One skill, one job. If the description needs "and also", split it.
 - Every skill ships `references/examples.md` with at least one prompt showing the expected trigger and behavior.
 
+### Tools
+
+- A role names the CLIs it uses for outside systems in `tools:`, and `_repo.md` names the ones every role uses. Definitions live in `plugins/<p>/tools/` or `targets/<t>/tools/` (see the plugin README, Tools).
+- Never hand-edit `<tool>.permissions.json`. Re-snapshot (`make tool-snapshot`), or change `read_verbs`/`always_ask` and `make build`.
+
 ### Roles
 
 - Base roles (`plugins/<p>/roles/<name>.md`) hold the generic charter. A target role file with `extends: <name>` gets the base body followed by its own repo-specific body.
@@ -109,9 +115,10 @@ Tests use the fixture targets in `tests/fixtures/consumer/` (`game-server`, `gam
 | `make validate` | `check-render`, then `claude plugin validate` on the marketplace and each plugin, then `toolkit/check_conventions.py` (examples, skill upload limits, assist levels, README roles tables) |
 | `make check-public [COMMITS=<range>]` | The public-readiness gate: `toolkit/check_public.py` with the denylist at `$AUTOMATE_DENYLIST` (a file outside every repo; CI reads the `AUTOMATE_DENYLIST` secret). Hits name the denylist line, never the term |
 | `make tools` | Fetch the pinned gitleaks into `.tools/` |
-| `make check-render` | Fail if any `plugins/*/src/**` render is stale |
+| `make check-render` | Fail if any `plugins/*/src/**` render or tool permissions file is stale |
 | `make test` | The toolkit's fixture tests, then `tests/` (role hooks, story, mirror, coordinator, targets) |
-| `make build` | Render `plugins/*/src/**` in place |
+| `make build` | Render `plugins/*/src/**` in place, and each `tools/<tool>.permissions.json` from its snapshot |
+| `make tool-snapshot TOOL=<tool>` | Snapshot a CLI's commands into `tools/<tool>.commands.txt` (needs the CLI installed) |
 | `make package [ALL=1]` / `make package-done` | Zip skills changed since the last upload for claude.ai / record them as uploaded |
 | `make install TARGET=<t> DEST=<repo>` | Vendor a target into `<repo>/.claude/` (commit it there) |
 | `make check-target TARGET=<t> DEST=<repo>` | Report drift; exit 1 if the target is edited, outdated, or stale |

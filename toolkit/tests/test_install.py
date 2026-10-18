@@ -119,6 +119,9 @@ class InstallTest(ToolkitCase):
         self.assertTrue((self.dest / ".claude/skills/do-thing/SKILL.md").is_file())
 
     def test_permissions_merge_and_belong_to_install_only_when_it_added_them(self):
+        self.edit("targets/demo/roles/_repo.md", "tools: [fakecli]\n", "")   # its rules: test_tool_perms
+        (self.home / "targets/demo/tools/fakecli.md").unlink()
+        self.assertEqual(self.install().returncode, 0)
         sp = self.dest / ".claude/settings.json"
         self.assertEqual(self.settings()["permissions"], {"allow": ["Bash(make check)"], "ask": ["Bash(make deploy)"]})
         s = self.settings()

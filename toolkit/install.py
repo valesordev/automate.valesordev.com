@@ -25,6 +25,14 @@ are vendored rather than installed:
                                  first, then the target's body)
     targets/<t>/settings.json -> merged into .claude/settings.json: entries of
                                  permissions.allow/ask/deny (nothing else)
+    tools: [<tool>, ...]      -> for each tool named in _repo.md or a role's frontmatter:
+                                 .claude/tools/<tool>.md (its usage notes) and
+                                 .claude/tools/<tool>.json (domain, check, instead_of,
+                                 allow, ask: what bin/role and the coordinator read), and
+                                 its allow/ask rules merged into .claude/settings.json.
+                                 A definition comes from targets/<t>/tools/<tool>.md, else
+                                 from plugins/<p>/tools/<tool>.md; `extends: <tool>` adds a
+                                 target's notes and instead_of to a plugin's definition.
 
 .claude/.automate.json records the source repo and commit, the source's
 `repo` (`owner/name` on GitHub, else its remote URL) and `ref` (the tag at a clean
@@ -44,8 +52,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sources import Sources, origin, repo_root, tag_at_head  # noqa: E402
+import tool_perms  # noqa: E402
 
 MANIFEST = ".claude/.automate.json"
+TOOLS = re.compile(r"^tools:\s*(\[.*\])\s*$", re.M)   # a role's or _repo.md's `tools: [a, b]`
 # Install plumbing every repo gets, whatever its plugins: {dest path: toolkit file}.
 TOOLKIT_FILES = {".claude/bin/update-agents": Path(__file__).resolve().parent / "update-agents"}
 
@@ -76,6 +86,86 @@ def compose_role(src: Path, plugins: list[str], sources: Sources) -> bytes:
             fm = EXTENDS.sub("", fm).strip("\n")
             return f"---\n{fm}\n---\n{bbody.rstrip()}\n\n{body.lstrip()}".encode()
     raise SystemExit(f"install: {src.name} extends '{base_name}', not found in plugins {plugins}")
+
+
+def tool_names(sources: Sources, target: str) -> list[str]:
+    """Every tool the target's _repo.md or roles name in `tools:`, in first-seen order."""
+    tdir = sources.root / "targets" / target
+    cfg = json.loads((tdir / "target.json").read_text())
+    rdir = tdir / cfg.get("roles", "roles")
+    names: list[str] = []
+    for f in sorted(rdir.glob("*.md"), key=lambda f: (f.name != "_repo.md", f.name)) if rdir.is_dir() else []:
+        text = f.read_text()
+        m = TOOLS.search(text.split("\n---\n", 1)[0]) if text.startswith("---\n") else None   # as bin/role reads it
+        names += [n for n in tool_perms.inline_list(m.group(1)) if n not in names] if m else []
+    return names
+
+
+def _tool_file(sources: Sources, plugins: list[str], name: str) -> Path | None:
+    for p in plugins:
+        f = sources.plugin(p) / "tools" / f"{name}.md"
+        if f.is_file():
+            return f
+    return None
+
+
+def resolve_tool(sources: Sources, target: str, name: str) -> tuple[dict, str, dict]:
+    """(definition, usage notes, generated permissions) for a tool a target names."""
+    tdir = sources.root / "targets" / target
+    plugins = json.loads((tdir / "target.json").read_text()).get("plugins", [])
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", name):
+        raise SystemExit(f"install: tool name {name!r} isn't a plain name")
+    own = tdir / "tools" / f"{name}.md"
+    src = own if own.is_file() else _tool_file(sources, plugins, name)
+    if src is None:
+        raise SystemExit(f"install: tool {name!r} is in neither targets/{target}/tools/ nor plugins {plugins}")
+    meta, body = tool_perms.parse(src.read_text())
+    perms_from = src
+    base_name = meta.pop("extends", None)
+    if base_name:
+        base = _tool_file(sources, plugins, base_name)
+        if base is None:
+            raise SystemExit(f"install: tools/{name}.md extends {base_name!r}, not found in plugins {plugins}")
+        bad = [k for k in tool_perms.BASE_ONLY if k in meta]
+        if bad:
+            raise SystemExit(f"install: targets/{target}/tools/{name}.md extends {base_name!r} but sets "
+                             f"{', '.join(bad)}, which only the definition with the snapshot may")
+        bmeta, bbody = tool_perms.parse(base.read_text())
+        inst = {k: list(dict.fromkeys(tool_perms.listed(bmeta.get("instead_of", {}).get(k)) +
+                                      tool_perms.listed(meta.get("instead_of", {}).get(k))))
+                for k in ("commands", "bash", "url")}
+        meta = {**bmeta, **meta, "instead_of": inst, "tool": meta.get("tool", bmeta.get("tool"))}
+        body = bbody.rstrip() + "\n\n" + body.lstrip()
+        perms_from = base
+    if meta.get("tool", name) != name:
+        raise SystemExit(f"install: {src.name} says `tool: {meta['tool']}`; a definition is named after its file")
+    perms = tool_perms.permissions(perms_from) or {"allow": [], "ask": []}
+    return meta, body, perms
+
+
+def tool_files(sources: Sources, target: str) -> tuple[dict[str, bytes], dict[str, list[str]]]:
+    """The vendored files for the target's tools, and their permission rules."""
+    files: dict[str, bytes] = {}
+    rules: dict[str, list[str]] = {}
+    for name in tool_names(sources, target):
+        meta, body, perms = resolve_tool(sources, target, name)
+        inst = meta.get("instead_of") or {}
+        index = {
+            "tool": name,
+            "kind": meta.get("kind", "cli"),
+            "domain": meta.get("domain", ""),
+            "check": meta.get("check", ""),
+            "credentials": meta.get("credentials", ""),
+            "version": perms.get("version", ""),
+            "instead_of": {k: tool_perms.listed(inst.get(k)) for k in ("commands", "bash", "url")},
+            "allow": perms["allow"],
+            "ask": perms["ask"],
+        }
+        files[f".claude/tools/{name}.json"] = (json.dumps(index, indent=1) + "\n").encode()
+        files[f".claude/tools/{name}.md"] = body.lstrip().encode()
+        for k in ("allow", "ask"):
+            rules.setdefault(f"permissions.{k}", []).extend(perms[k])
+    return files, rules
 
 
 def plan(sources: Sources, target: str) -> tuple[dict[str, bytes], dict]:
@@ -109,6 +199,7 @@ def plan(sources: Sources, target: str) -> tuple[dict[str, bytes], dict]:
     if rdir.is_dir():
         for f in sorted(rdir.glob("*.md")):
             files[f".claude/roles/{f.name}"] = compose_role(f, plugins, sources)
+    files.update(tool_files(sources, target)[0])
     return files, hooks
 
 
@@ -116,11 +207,9 @@ PERMISSION_LISTS = ("allow", "ask", "deny")
 
 
 def settings_fragment(sources: Sources, target: str) -> dict[str, list[str]]:
-    """targets/<t>/settings.json as {"permissions.allow": [...], ...}; only permission lists."""
+    """targets/<t>/settings.json as {"permissions.allow": [...], ...}, plus the target's tools' rules."""
     f = sources.root / "targets" / target / "settings.json"
-    if not f.is_file():
-        return {}
-    frag = json.loads(f.read_text())
+    frag = json.loads(f.read_text()) if f.is_file() else {}
     perms = frag.get("permissions", {})
     bad = [k for k in frag if k != "permissions"] + \
           [f"permissions.{k}" for k in perms if k not in PERMISSION_LISTS] + \
@@ -129,7 +218,10 @@ def settings_fragment(sources: Sources, target: str) -> dict[str, list[str]]:
     if bad:
         raise SystemExit(f"install: targets/{target}/settings.json may only hold lists of rules in "
                          f"permissions.allow/ask/deny; fix: {', '.join(bad)}")
-    return {f"permissions.{k}": list(dict.fromkeys(v)) for k, v in perms.items() if v}
+    out = {f"permissions.{k}": list(v) for k, v in perms.items() if v}
+    for k, v in tool_files(sources, target)[1].items():
+        out.setdefault(k, []).extend(v)
+    return {k: list(dict.fromkeys(v)) for k, v in out.items() if v}
 
 
 def merge_permissions(settings: dict, old: dict[str, list[str]],
