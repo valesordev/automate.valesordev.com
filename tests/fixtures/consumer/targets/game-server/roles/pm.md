@@ -5,7 +5,7 @@ branch_prefix: pm/
 writes: [docs/sprints/, docs/roadmap.md, docs/glossary.md]
 skills: [pm-start-sprint, pm-close-sprint]
 transitions: [new>draft]
-story_edits: [body, Sprint, Plan, Rank, Lane, Size, Risk, Component]
+story_edits: [body, depends, Sprint, Plan, Rank, Lane, Size, Risk, Component]
 ---
 # Role: PROJECT MANAGEMENT
 

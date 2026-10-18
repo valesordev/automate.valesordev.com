@@ -149,6 +149,12 @@ class FakeGH:
                 assert body[key] in ids, f"{key} must be an issue id, got {body[key]}"
                 self.links.append((n, rest, body[key]))
                 return {}
+            dm = re.fullmatch(r"/dependencies/blocked_by/(\d+)", rest)
+            if dm and method == "DELETE":
+                link = (n, "/dependencies/blocked_by", int(dm.group(1)))
+                assert link in self.links, f"no link {link}"
+                self.links.remove(link)
+                return {}
         raise AssertionError(f"unexpected {method} {path}")
 
 
@@ -224,6 +230,50 @@ class StoryTest(unittest.TestCase):
         self.gh.links.append((1, "/dependencies/blocked_by", self.gh.issues[4]["id"]))
         self.assertIn("Blocked by: GS-SRV-003 (review)", self.run_story("show", "GS-SRV-001", sid=None)[1])
         self.assertIn("Body of GS-SRV-001", out)
+
+    def blockers(self, n):
+        return sorted(i for (k, r, i) in self.gh.links if k == n and r == "/dependencies/blocked_by")
+
+    def test_depends_adds_and_removes_blocked_by_links(self):
+        gc = self.gh.add("GC-PCK-001", "a content pack", repo=CONTENT, Status="draft", Lane="content")
+        self.as_role("pm")
+        code, out = self.run_story("depends", "GS-SRV-002", "--add", "GS-INF-001,GC-PCK-001", "--note", "infra first")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.blockers(3), sorted([self.gh.issues[2]["id"], self.gh.issues[gc]["id"]]))
+        self.assertIn("blocked by GS-INF-001 (ready), GC-PCK-001 (draft) (+GS-INF-001, +GC-PCK-001)", out)
+        self.assertEqual(self.gh.comments[3][-1], "**Depends (pm):** blocked by +GS-INF-001, +GC-PCK-001. infra first")
+        self.assertIn("Blocked by: GS-INF-001 (ready), GC-PCK-001 (draft)", self.run_story("show", "GS-SRV-002")[1])
+        writes = len([c for c in self.gh.calls if c[0] != "GET"])
+        code, out = self.run_story("depends", "GS-SRV-002", "--add", "GS-INF-001", "--remove", "GS-SRV-001")
+        self.assertEqual(code, 0, out)
+        self.assertIn("no change (already blocked by GS-INF-001; not blocked by GS-SRV-001)", out)
+        self.assertEqual(len([c for c in self.gh.calls if c[0] != "GET"]), writes)    # nothing written
+        code, out = self.run_story("depends", "GS-SRV-002", "--remove", "GC-PCK-001", "--add", "GS-SRV-001")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.blockers(3), sorted([self.gh.issues[2]["id"], self.gh.issues[1]["id"]]))
+        self.assertIn("(+GS-SRV-001, -GC-PCK-001)", out)
+
+    def test_depends_needs_the_story_edit_and_this_repos_story(self):
+        gc = self.gh.add("GC-PCK-001", "a content pack", repo=CONTENT, Status="draft", Lane="content")
+        code, out = self.run_story("depends", "GS-SRV-002", "--add", "GS-INF-001", sid=None)
+        self.assertIn("no role set", out)
+        self.as_role("impl")
+        code, out = self.run_story("depends", "GS-SRV-002", "--add", "GS-INF-001")
+        self.assertEqual(code, 1)
+        self.assertIn("needs `depends` in story_edits", out)
+        self.as_role("arch")
+        for args, why in ((("GC-PCK-001", "--add", "GS-INF-001"), "belongs to example/game-content"),
+                          (("GS-SRV-002", "--add", "GS-SRV-002"), "can't block itself"),
+                          (("GS-SRV-002", "--add", "GS-INF-001", "--remove", "GS-INF-001"), "both added and removed"),
+                          (("GS-SRV-002",), "give --add"),
+                          (("GS-SRV-002", "--add", "GS-INF-001,GS-NOPE-404"), "no story GS-NOPE-404")):
+            code, out = self.run_story("depends", *args)
+            self.assertEqual(code, 1, args)
+            self.assertIn(why, out, args)
+        self.assertEqual(self.gh.links, [])          # a bad ID anywhere leaves nothing behind
+        self.as_role("none")
+        self.assertEqual(self.run_story("depends", "GS-SRV-002", "--add", "GS-INF-001")[0], 0)
+        self.assertNotIn(gc, [k for (k, _, _) in self.gh.links])
 
     def test_lane_starts_only_its_own_ready_stories(self):
         self.as_role("impl")

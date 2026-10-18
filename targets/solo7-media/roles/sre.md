@@ -8,7 +8,7 @@ writes: [.github/, Makefile, scripts/, obs/, docs/runbooks/, docs/specs/slo/, "s
 skills: [sre-start-sprint]
 tools: [gcx]
 transitions: [ready>in-progress@lane]
-story_edits: [body]
+story_edits: [body, depends]
 on_merge: [in-progress>review@lane]
 lane_allow: [Bash(make qa-browser-install:*), Bash(make qa-shots-valesordev:*)]
 ---
