@@ -106,6 +106,7 @@ For a repo with a Project (`project:` in `_repo.md`), `bin/story` is how role se
 | `story start <ID>` / `story status <ID> <status> [--note …]` | moves Status and posts `**Status (<role>):** a → b`. Moving to `done` closes the issue | `transitions:` (`from>to`, `from>to@lane` for the role's own Lane, or `from>to@<lane>` for a named lane such as `@director`) |
 | `story set <ID> Field=value …` | Sprint, Cycle, Plan, Rank, Lane, Size, Risk, Component | `story_edits:` |
 | `story body <ID> --body-file F` | replaces the contract (issue body) | `story_edits: [body]` |
+| `story depends <ID> [--add ID,…] [--remove ID,…] [--note …]` | adds or removes the story's blocked-by links and posts `**Depends (<role>):** blocked by +A, -B`. The story is this repo's; a blocker can be any story on the Project. Re-adding or removing a link that isn't there writes nothing | `story_edits: [depends]` |
 | `story comment <ID> (--to ROLE \| --record NAME) (--body … \| --body-file F)` | `**For <role>:**` or `**<record> (<role>):**` comment | any role |
 | `coordinator comment <ID> --to ROLE (--body … \| --body-file F)` | `**For <role>:**` comment stamped `from: coordinator` | the role-free dispatcher session, `/role none`, or a terminal; never a lane or a role session |
 | `coordinator file-issues <run-id> [--lane NAME] [--apply]` | the run's drafted config-failure issues, shown; with `--apply`, filed in the installing repo | the owner; never a lane |
