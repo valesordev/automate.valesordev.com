@@ -411,6 +411,10 @@ class StoryTest(unittest.TestCase):
         code, out = self.run_story("start", "GS-SRV-001", sid=None)
         self.assertEqual(code, 1)
         self.assertIn("no role set", out)
+        self.assertNotIn("coordinator comment", out)
+        code, out = self.run_story("comment", "GS-SRV-001", "--to", "arch", "--body", "q", sid=None)
+        self.assertEqual(code, 1)
+        self.assertIn("posts with `.claude/bin/coordinator comment <ID> --to <role>`", out)   # the dispatcher's way
         self.as_role("none")
         self.assertEqual(self.run_story("status", "GS-SRV-002", "ready")[0], 0)
 
