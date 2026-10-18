@@ -20,6 +20,12 @@
         "hooks": [
           { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/role\" hook-pre-bash --project" }
         ]
+      },
+      {
+        "matcher": "WebFetch|mcp__.*navigate",
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/role\" hook-pre-url --project" }
+        ]
       }
     ]
   }

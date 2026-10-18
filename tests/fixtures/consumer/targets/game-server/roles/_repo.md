@@ -2,6 +2,7 @@
 generated: [gen/, docs/builders/reference.md]
 check: make check
 lane_path: [bin/]
+tools: [deployctl]
 project: Demo Game
 story_prefix: GS
 github_repo: example/game-server

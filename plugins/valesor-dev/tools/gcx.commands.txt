@@ -1,0 +1,604 @@
+# gcx version 1.6.0 built from 9a29e9e0b95733f7a97b2988374b5708b2ce6e2d on 2026-10-13T10:14:02Z
+gcx agent prune
+gcx agent skills get
+gcx agent skills install
+gcx agent skills list
+gcx agent skills uninstall
+gcx agent skills update
+gcx agento11y agents get
+gcx agento11y agents list
+gcx agento11y agents list-versions
+gcx agento11y collections add-conversations
+gcx agento11y collections create
+gcx agento11y collections delete
+gcx agento11y collections get
+gcx agento11y collections list
+gcx agento11y collections list-conversations
+gcx agento11y collections remove-conversation
+gcx agento11y collections update
+gcx agento11y conversations annotate
+gcx agento11y conversations get
+gcx agento11y conversations list
+gcx agento11y conversations list-annotations
+gcx agento11y conversations search
+gcx agento11y evaluators delete
+gcx agento11y evaluators get
+gcx agento11y evaluators list
+gcx agento11y evaluators test
+gcx agento11y evaluators upsert
+gcx agento11y experiments cancel
+gcx agento11y experiments create
+gcx agento11y experiments get
+gcx agento11y experiments get-report
+gcx agento11y experiments list
+gcx agento11y experiments list-scores
+gcx agento11y experiments list-trials
+gcx agento11y experiments pull
+gcx agento11y experiments test-suites cases delete
+gcx agento11y experiments test-suites cases get
+gcx agento11y experiments test-suites cases list
+gcx agento11y experiments test-suites cases update
+gcx agento11y experiments test-suites cases upsert
+gcx agento11y experiments test-suites create
+gcx agento11y experiments test-suites get
+gcx agento11y experiments test-suites list
+gcx agento11y experiments test-suites update
+gcx agento11y experiments test-suites versions create
+gcx agento11y experiments test-suites versions publish
+gcx agento11y experiments trials create
+gcx agento11y experiments trials get
+gcx agento11y experiments trials list-artifacts
+gcx agento11y experiments trials list-scores
+gcx agento11y experiments trials update
+gcx agento11y experiments update
+gcx agento11y generations get
+gcx agento11y generations list-scores
+gcx agento11y guards create
+gcx agento11y guards delete
+gcx agento11y guards get
+gcx agento11y guards list
+gcx agento11y guards update
+gcx agento11y judge list-models
+gcx agento11y judge list-providers
+gcx agento11y model-rates create
+gcx agento11y model-rates delete
+gcx agento11y model-rates list
+gcx agento11y rules create
+gcx agento11y rules delete
+gcx agento11y rules get
+gcx agento11y rules list
+gcx agento11y rules list-scores
+gcx agento11y rules update
+gcx agento11y saved-conversations collections
+gcx agento11y saved-conversations delete
+gcx agento11y saved-conversations get
+gcx agento11y saved-conversations list
+gcx agento11y saved-conversations save
+gcx agento11y templates get
+gcx agento11y templates list
+gcx agento11y templates list-versions
+gcx alert contact-points create
+gcx alert contact-points delete
+gcx alert contact-points export
+gcx alert contact-points get
+gcx alert contact-points list
+gcx alert contact-points update
+gcx alert groups get
+gcx alert groups list
+gcx alert groups status
+gcx alert instances list
+gcx alert mute-timings create
+gcx alert mute-timings delete
+gcx alert mute-timings export
+gcx alert mute-timings get
+gcx alert mute-timings list
+gcx alert mute-timings update
+gcx alert notification-history list
+gcx alert notification-history list-alerts
+gcx alert notification-policies export
+gcx alert notification-policies get
+gcx alert notification-policies reset
+gcx alert notification-policies set
+gcx alert routing-trees create
+gcx alert routing-trees delete
+gcx alert routing-trees get
+gcx alert routing-trees list
+gcx alert routing-trees update
+gcx alert ruler groups delete
+gcx alert ruler groups get
+gcx alert ruler groups list
+gcx alert ruler groups upsert
+gcx alert ruler namespaces delete
+gcx alert ruler namespaces list
+gcx alert rules get
+gcx alert rules list
+gcx alert state-history list
+gcx alert templates delete
+gcx alert templates get
+gcx alert templates list
+gcx alert templates upsert
+gcx api
+gcx appo11y operations get
+gcx appo11y operations list
+gcx appo11y overrides get
+gcx appo11y overrides update
+gcx appo11y services get
+gcx appo11y services list
+gcx appo11y services list-labels
+gcx appo11y services list-operations
+gcx appo11y services map
+gcx appo11y settings get
+gcx appo11y settings update
+gcx assistant conversation get
+gcx assistant conversation list
+gcx assistant investigations cancel
+gcx assistant investigations create
+gcx assistant investigations get
+gcx assistant investigations get-narrative
+gcx assistant investigations list
+gcx assistant investigations list-evidence
+gcx assistant investigations list-messages
+gcx assistant investigations list-tool-calls
+gcx assistant investigations mode
+gcx assistant investigations pause
+gcx assistant investigations resume
+gcx assistant investigations share
+gcx assistant mcp-servers create
+gcx assistant mcp-servers delete
+gcx assistant mcp-servers get
+gcx assistant mcp-servers list
+gcx assistant mcp-servers update
+gcx assistant prompt
+gcx cloud login
+gcx cloud orgs list
+gcx cloud stacks create
+gcx cloud stacks delete
+gcx cloud stacks get
+gcx cloud stacks list
+gcx cloud stacks list-regions
+gcx cloud stacks update
+gcx commands
+gcx completion bash
+gcx completion fish
+gcx completion powershell
+gcx completion zsh
+gcx config check
+gcx config current-context
+gcx config edit
+gcx config list-contexts
+gcx config path
+gcx config set
+gcx config unset
+gcx config use-context
+gcx config view
+gcx dashboards create
+gcx dashboards delete
+gcx dashboards get
+gcx dashboards list
+gcx dashboards list-versions
+gcx dashboards search
+gcx dashboards snapshot
+gcx dashboards update
+gcx dashboards versions restore
+gcx datasources athena describe-table
+gcx datasources athena list-catalogs
+gcx datasources athena list-databases
+gcx datasources athena list-tables
+gcx datasources athena query
+gcx datasources azuremonitor list-metrics
+gcx datasources azuremonitor list-resource-groups
+gcx datasources azuremonitor list-resources
+gcx datasources azuremonitor list-subscriptions
+gcx datasources azuremonitor logs query
+gcx datasources azuremonitor query
+gcx datasources azuremonitor resource-graph query
+gcx datasources bigquery describe-table
+gcx datasources bigquery list-datasets
+gcx datasources bigquery list-tables
+gcx datasources bigquery query
+gcx datasources clickhouse describe-table
+gcx datasources clickhouse list-tables
+gcx datasources clickhouse query
+gcx datasources cloudmonitoring list-metrics
+gcx datasources cloudmonitoring list-projects
+gcx datasources cloudmonitoring query
+gcx datasources cloudwatch list-accounts
+gcx datasources cloudwatch list-dimensions
+gcx datasources cloudwatch list-metrics
+gcx datasources cloudwatch list-namespaces
+gcx datasources cloudwatch list-regions
+gcx datasources cloudwatch query
+gcx datasources create
+gcx datasources delete
+gcx datasources elasticsearch list-fields
+gcx datasources elasticsearch list-indices
+gcx datasources elasticsearch metrics
+gcx datasources elasticsearch query
+gcx datasources get
+gcx datasources health
+gcx datasources infinity query
+gcx datasources influxdb list-field-keys
+gcx datasources influxdb list-measurements
+gcx datasources influxdb list-tag-keys
+gcx datasources influxdb list-tag-values
+gcx datasources influxdb query
+gcx datasources list
+gcx datasources loki labels
+gcx datasources loki metrics
+gcx datasources loki query
+gcx datasources loki series
+gcx datasources mssql describe-table
+gcx datasources mssql list-tables
+gcx datasources mssql query
+gcx datasources mysql describe-table
+gcx datasources mysql list-tables
+gcx datasources mysql query
+gcx datasources opensearch list-fields
+gcx datasources opensearch list-indices
+gcx datasources opensearch metrics
+gcx datasources opensearch query
+gcx datasources pinot query
+gcx datasources postgres describe-table
+gcx datasources postgres list-tables
+gcx datasources postgres query
+gcx datasources prometheus labels
+gcx datasources prometheus metadata
+gcx datasources prometheus query
+gcx datasources prometheus search-label-names
+gcx datasources prometheus search-label-values
+gcx datasources prometheus search-metric-names
+gcx datasources pyroscope data-range
+gcx datasources pyroscope exemplars profile
+gcx datasources pyroscope exemplars span
+gcx datasources pyroscope labels
+gcx datasources pyroscope list-profile-types
+gcx datasources pyroscope metrics
+gcx datasources pyroscope query
+gcx datasources pyroscope query-anomalies
+gcx datasources pyroscope series
+gcx datasources query
+gcx datasources schemas get
+gcx datasources schemas list
+gcx datasources tempo baseline
+gcx datasources tempo diff
+gcx datasources tempo get
+gcx datasources tempo labels
+gcx datasources tempo metrics
+gcx datasources tempo query
+gcx datasources update
+gcx dbo11y instances get
+gcx dbo11y instances list
+gcx dev generate
+gcx dev import
+gcx dev lint list-rules
+gcx dev lint new
+gcx dev lint run
+gcx dev lint test
+gcx dev scaffold
+gcx dev serve
+gcx docs get
+gcx docs list-links
+gcx docs list-products
+gcx docs outline
+gcx docs search
+gcx fleet collectors create
+gcx fleet collectors delete
+gcx fleet collectors get
+gcx fleet collectors list
+gcx fleet collectors update
+gcx fleet pipelines create
+gcx fleet pipelines delete
+gcx fleet pipelines get
+gcx fleet pipelines list
+gcx fleet pipelines update
+gcx fleet tenant get-limits
+gcx frontend apps apply-sourcemap
+gcx frontend apps create
+gcx frontend apps delete
+gcx frontend apps delete-sourcemap
+gcx frontend apps get
+gcx frontend apps list
+gcx frontend apps list-sourcemaps
+gcx frontend apps update
+gcx frontend sessions get
+gcx help
+gcx help-tree
+gcx instrumentation check
+gcx instrumentation clusters apps configure
+gcx instrumentation clusters apps get
+gcx instrumentation clusters apps list
+gcx instrumentation clusters apps remove
+gcx instrumentation clusters apps wait
+gcx instrumentation clusters configure
+gcx instrumentation clusters get
+gcx instrumentation clusters list
+gcx instrumentation clusters remove
+gcx instrumentation clusters wait
+gcx instrumentation explain
+gcx instrumentation list-explanations
+gcx instrumentation services clear
+gcx instrumentation services exclude
+gcx instrumentation services get
+gcx instrumentation services include
+gcx instrumentation services list
+gcx instrumentation setup
+gcx instrumentation status
+gcx irm incidents activity add
+gcx irm incidents close
+gcx irm incidents create
+gcx irm incidents get
+gcx irm incidents get-pir
+gcx irm incidents list
+gcx irm incidents list-activity
+gcx irm incidents list-contexts
+gcx irm incidents open
+gcx irm incidents severities list
+gcx irm incidents update
+gcx irm oncall alert-groups acknowledge
+gcx irm oncall alert-groups delete
+gcx irm oncall alert-groups get
+gcx irm oncall alert-groups list
+gcx irm oncall alert-groups list-alerts
+gcx irm oncall alert-groups resolve
+gcx irm oncall alert-groups silence
+gcx irm oncall alert-groups unacknowledge
+gcx irm oncall alert-groups unresolve
+gcx irm oncall alert-groups unsilence
+gcx irm oncall escalate
+gcx irm oncall escalation-chains create
+gcx irm oncall escalation-chains delete
+gcx irm oncall escalation-chains get
+gcx irm oncall escalation-chains list
+gcx irm oncall escalation-chains update
+gcx irm oncall escalation-policies create
+gcx irm oncall escalation-policies delete
+gcx irm oncall escalation-policies get
+gcx irm oncall escalation-policies list
+gcx irm oncall escalation-policies list-step-types
+gcx irm oncall escalation-policies steps list
+gcx irm oncall escalation-policies update
+gcx irm oncall integrations create
+gcx irm oncall integrations delete
+gcx irm oncall integrations get
+gcx irm oncall integrations get-templates
+gcx irm oncall integrations list
+gcx irm oncall integrations start-maintenance
+gcx irm oncall integrations stop-maintenance
+gcx irm oncall integrations update
+gcx irm oncall integrations update-templates
+gcx irm oncall organizations get
+gcx irm oncall resolution-notes create
+gcx irm oncall resolution-notes delete
+gcx irm oncall resolution-notes get
+gcx irm oncall resolution-notes list
+gcx irm oncall resolution-notes update
+gcx irm oncall routes create
+gcx irm oncall routes delete
+gcx irm oncall routes filter-types list
+gcx irm oncall routes get
+gcx irm oncall routes list
+gcx irm oncall routes list-filter-types
+gcx irm oncall routes update
+gcx irm oncall schedules create
+gcx irm oncall schedules delete
+gcx irm oncall schedules get
+gcx irm oncall schedules list
+gcx irm oncall schedules list-final-shifts
+gcx irm oncall schedules update
+gcx irm oncall shift-swaps create
+gcx irm oncall shift-swaps delete
+gcx irm oncall shift-swaps get
+gcx irm oncall shift-swaps list
+gcx irm oncall shift-swaps update
+gcx irm oncall shifts create
+gcx irm oncall shifts delete
+gcx irm oncall shifts get
+gcx irm oncall shifts list
+gcx irm oncall shifts update
+gcx irm oncall slack-channels list
+gcx irm oncall teams get
+gcx irm oncall teams list
+gcx irm oncall user-groups list
+gcx irm oncall users current
+gcx irm oncall users get
+gcx irm oncall users list
+gcx irm oncall webhooks create
+gcx irm oncall webhooks delete
+gcx irm oncall webhooks get
+gcx irm oncall webhooks list
+gcx irm oncall webhooks list-presets
+gcx irm oncall webhooks list-triggers
+gcx irm oncall webhooks presets list
+gcx irm oncall webhooks triggers list
+gcx irm oncall webhooks update
+gcx k6 auth token
+gcx k6 env-vars create
+gcx k6 env-vars delete
+gcx k6 env-vars list
+gcx k6 env-vars update
+gcx k6 load-tests create
+gcx k6 load-tests delete
+gcx k6 load-tests delete-schedule
+gcx k6 load-tests get
+gcx k6 load-tests list
+gcx k6 load-tests update
+gcx k6 load-tests update-script
+gcx k6 load-zones create
+gcx k6 load-zones delete
+gcx k6 load-zones list
+gcx k6 load-zones list-allowed-projects
+gcx k6 load-zones update-allowed-projects
+gcx k6 projects create
+gcx k6 projects delete
+gcx k6 projects get
+gcx k6 projects list
+gcx k6 projects list-allowed-load-zones
+gcx k6 projects update
+gcx k6 projects update-allowed-load-zones
+gcx k6 runs list
+gcx k6 schedules create
+gcx k6 schedules get
+gcx k6 schedules list
+gcx k6 schedules update
+gcx k6 test-run emit
+gcx k6 test-run runs list
+gcx k6 test-run status
+gcx kg diagnose labels
+gcx kg diagnose service
+gcx kg entities correlate
+gcx kg entities delete
+gcx kg entities inspect
+gcx kg entities list
+gcx kg entities query
+gcx kg entities upsert
+gcx kg insights chart
+gcx kg insights sources
+gcx kg meta all
+gcx kg meta logs
+gcx kg meta metrics
+gcx kg meta profiles
+gcx kg meta schema
+gcx kg meta scopes
+gcx kg meta traces
+gcx kg model-rules delete
+gcx kg model-rules get
+gcx kg model-rules list
+gcx kg model-rules schema
+gcx kg model-rules upsert
+gcx kg notifications delete
+gcx kg notifications get
+gcx kg notifications list
+gcx kg notifications upsert
+gcx kg open
+gcx kg prom-rules delete
+gcx kg prom-rules get
+gcx kg prom-rules list
+gcx kg prom-rules schema
+gcx kg prom-rules upsert
+gcx kg quality get
+gcx kg quality list
+gcx kg relabel-rules get
+gcx kg relationships delete
+gcx kg relationships upsert
+gcx kg stats
+gcx kg status
+gcx kg suppressions delete
+gcx kg suppressions list
+gcx kg suppressions upsert
+gcx login
+gcx logs adaptive drop-rules create
+gcx logs adaptive drop-rules delete
+gcx logs adaptive drop-rules get
+gcx logs adaptive drop-rules list
+gcx logs adaptive drop-rules update
+gcx logs adaptive exemptions create
+gcx logs adaptive exemptions delete
+gcx logs adaptive exemptions list
+gcx logs adaptive exemptions update
+gcx logs adaptive patterns list
+gcx logs adaptive patterns stats
+gcx logs adaptive segments create
+gcx logs adaptive segments delete
+gcx logs adaptive segments list
+gcx logs adaptive segments update
+gcx logs labels
+gcx logs metrics
+gcx logs query
+gcx logs series
+gcx metrics adaptive exemptions create
+gcx metrics adaptive exemptions delete
+gcx metrics adaptive exemptions get
+gcx metrics adaptive exemptions list
+gcx metrics adaptive exemptions update
+gcx metrics adaptive recommendations apply
+gcx metrics adaptive recommendations diff
+gcx metrics adaptive recommendations list
+gcx metrics adaptive rules create
+gcx metrics adaptive rules delete
+gcx metrics adaptive rules get
+gcx metrics adaptive rules list
+gcx metrics adaptive rules update
+gcx metrics adaptive segments create
+gcx metrics adaptive segments delete
+gcx metrics adaptive segments get
+gcx metrics adaptive segments list
+gcx metrics adaptive segments update
+gcx metrics billing labels
+gcx metrics billing query
+gcx metrics billing series
+gcx metrics cardinality label-names
+gcx metrics cardinality label-values
+gcx metrics labels
+gcx metrics list-names
+gcx metrics metadata
+gcx metrics query
+gcx metrics search label-names
+gcx metrics search label-values
+gcx metrics search metric-names
+gcx metrics series
+gcx profiles adaptive
+gcx profiles data-range
+gcx profiles exemplars profile
+gcx profiles exemplars span
+gcx profiles labels
+gcx profiles list-profile-types
+gcx profiles metrics
+gcx profiles query
+gcx profiles query-anomalies
+gcx profiles series
+gcx providers list
+gcx resources delete
+gcx resources edit
+gcx resources get
+gcx resources list-examples
+gcx resources list-types
+gcx resources pull
+gcx resources push
+gcx resources validate
+gcx setup status
+gcx signup
+gcx slo definitions delete
+gcx slo definitions get
+gcx slo definitions list
+gcx slo definitions pull
+gcx slo definitions push
+gcx slo definitions status
+gcx slo definitions timeline
+gcx slo reports delete
+gcx slo reports get
+gcx slo reports list
+gcx slo reports pull
+gcx slo reports push
+gcx slo reports status
+gcx slo reports timeline
+gcx synthetic-monitoring checks create
+gcx synthetic-monitoring checks delete
+gcx synthetic-monitoring checks get
+gcx synthetic-monitoring checks list
+gcx synthetic-monitoring checks status
+gcx synthetic-monitoring checks test
+gcx synthetic-monitoring checks timeline
+gcx synthetic-monitoring checks update
+gcx synthetic-monitoring probes create
+gcx synthetic-monitoring probes delete
+gcx synthetic-monitoring probes deploy
+gcx synthetic-monitoring probes list
+gcx synthetic-monitoring probes reset-token
+gcx synthetic-monitoring queries get
+gcx synthetic-monitoring queries list
+gcx synthetic-monitoring query
+gcx traces adaptive policies create
+gcx traces adaptive policies delete
+gcx traces adaptive policies get
+gcx traces adaptive policies list
+gcx traces adaptive policies update
+gcx traces adaptive recommendations apply
+gcx traces adaptive recommendations dismiss
+gcx traces adaptive recommendations list
+gcx traces baseline
+gcx traces diff
+gcx traces get
+gcx traces labels
+gcx traces metrics
+gcx traces query
+gcx version

@@ -1551,6 +1551,82 @@ class RoleTest(unittest.TestCase):
         other = run(self.role, "show", "session_other", cwd=self.repo)
         self.assertEqual(other.stdout.strip(), "unset")
 
+    # ------------------------------------------------------------------ tools
+
+    def advice(self, out):
+        return json.loads(out)["hookSpecificOutput"].get("additionalContext", "") if out else ""
+
+    def test_tools_are_vendored_with_their_rules(self):
+        for rel in (".claude/tools/gcx.md", ".claude/tools/gcx.json",
+                    ".claude/tools/deployctl.md", ".claude/tools/deployctl.json"):
+            self.assertTrue((self.repo / rel).is_file(), rel)
+        gcx = json.loads((self.repo / ".claude/tools/gcx.json").read_text())
+        self.assertEqual(gcx["domain"], "Grafana Cloud")
+        self.assertIn("Bash(gcx dashboards list:*)", gcx["allow"])
+        self.assertIn("Bash(gcx dashboards delete:*)", gcx["ask"])
+        self.assertIn("Bash(gcx api:*)", gcx["ask"])
+        perms = json.loads((self.repo / ".claude/settings.json").read_text())["permissions"]
+        self.assertIn("Bash(gcx dashboards list:*)", perms["allow"])
+        self.assertIn("Bash(gcx dashboards delete:*)", perms["ask"])
+        self.assertNotIn("extends", (self.repo / ".claude/tools/deployctl.md").read_text())
+        hooks = json.loads((self.repo / ".claude/settings.json").read_text())["hooks"]["PreToolUse"]
+        self.assertIn("WebFetch", " ".join(h["matcher"] for h in hooks if "hook-pre-url" in h["hooks"][0]["command"]))
+
+    def test_charter_lists_repo_and_role_tools_and_flags_a_missing_one(self):
+        out = self.set_role("sre").stdout
+        self.assertIn("- Grafana Cloud: gcx (.claude/tools/gcx.md)", out)
+        self.assertRegex(out, r"- Demo Game deploys: deployctl \(\.claude/tools/deployctl\.md\)\. NOT AVAILABLE: "
+                              r"`false` exited 1")
+        impl = self.set_role("impl").stdout
+        self.assertIn("deployctl", impl)             # _repo.md's tools: every role
+        self.assertNotIn("gcx", impl)                # sre's own
+        self.assertIn("deployctl", self.set_role("none").stdout)
+        self.set_role("sre")
+        self.assertIn("Grafana Cloud: gcx", self.hook("hook-session-start", source="resume"))
+
+    def test_bash_advice_names_the_tool_and_never_decides(self):
+        self.set_role("sre")
+        for cmd, what in (("mimirtool rules list", "`mimirtool`"), ("FOO=1 timeout 5 logcli query '{a=1}'", "`logcli`"),
+                          ("echo $(promtool query instant x)", "`promtool`"), ("/usr/bin/tempo-cli query", "`tempo-cli`"),
+                          ("curl -s https://acme.grafana.net/api/health", "a direct request"),
+                          ("rawdeploy --now", "`rawdeploy`")):
+            out = self.hook("hook-pre-bash", tool_name="Bash", tool_input={"command": cmd})
+            self.assertIn(what, self.advice(out), cmd)
+            self.assertNotIn("permissionDecision", json.loads(out)["hookSpecificOutput"], cmd)
+        for cmd in ("gcx dashboards list", "curl https://grafana.com/docs/", "echo mimirtool", "ls"):
+            self.assertEqual(self.hook("hook-pre-bash", tool_name="Bash", tool_input={"command": cmd}), "", cmd)
+        self.set_role("impl")   # not one of impl's tools
+        self.assertEqual(self.hook("hook-pre-bash", tool_name="Bash", tool_input={"command": "mimirtool x"}), "")
+        self.assertIn("deployctl", self.advice(self.hook("hook-pre-bash", tool_name="Bash",
+                                                         tool_input={"command": "rawdeploy"})))
+
+    def test_bash_advice_rides_along_with_an_ask_and_a_deny_wins_alone(self):
+        self.set_role("none")
+        out = json.loads(self.hook("hook-pre-bash", tool_name="Bash",
+                                   tool_input={"command": "rawdeploy && git push origin HEAD"}))["hookSpecificOutput"]
+        self.assertEqual(out["permissionDecision"], "ask")
+        self.assertIn("deployctl", out["additionalContext"])
+        self.set_role("sre")
+        out = self.bash("rawdeploy; git add -A")
+        self.assertEqual(out["permissionDecision"], "deny")
+
+    def test_url_advice_for_fetch_and_browser_navigation(self):
+        self.set_role("sre")
+        for tool, url in (("WebFetch", "https://acme.grafana.net/d/abc"),
+                          ("mcp__claude-in-chrome__navigate", "https://deploy.example.test/x")):
+            out = self.hook("hook-pre-url", tool_name=tool, tool_input={"url": url})
+            self.assertIn("see .claude/tools/", self.advice(out), url)
+            self.assertNotIn("permissionDecision", json.loads(out)["hookSpecificOutput"])
+        for url in ("https://grafana.com/docs/grafana/latest/", "not a url", ""):
+            self.assertEqual(self.hook("hook-pre-url", tool_name="WebFetch", tool_input={"url": url}), "", url)
+        self.assertEqual(self.hook("hook-pre-url", tool_name="WebFetch", tool_input={"url": 3}), "")
+
+    def test_a_broken_tool_file_gives_no_advice_and_no_failure(self):
+        self.set_role("sre")
+        (self.repo / ".claude/tools/gcx.json").write_text("{not json")
+        self.assertEqual(self.hook("hook-pre-bash", tool_name="Bash", tool_input={"command": "mimirtool x"}), "")
+        self.assertNotIn("gcx", self.set_role("sre").stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
