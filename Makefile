@@ -4,7 +4,7 @@ PLUGINS    := $(notdir $(wildcard plugins/*))
 DIST       := dist
 TK         := python3 toolkit
 
-.PHONY: help validate check-public tools check-render build package package-done install check-target docs-export mirror cutover test dev clean
+.PHONY: help validate check-public tools tool-snapshot check-render build package package-done install check-target docs-export mirror cutover test dev clean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -20,11 +20,17 @@ check-public: tools ## Public-readiness gate: Notion links, denylist (AUTOMATE_D
 tools: ## Fetch the pinned gitleaks into .tools/, checksum-verified
 	@$(TK)/tools.py --root $(CURDIR)
 
-check-render: ## Fail if any plugins/*/src/** render is stale
-	@for p in $(PLUGINS); do $(TK)/render.py --root $(CURDIR) --check plugins/$$p; done
+tool-snapshot: ## Snapshot a CLI's commands for its tool definition (needs the CLI): make tool-snapshot TOOL=gcx
+	@test -n "$(TOOL)" || { echo "usage: make tool-snapshot TOOL=<tool name or path to its .md>"; exit 1; }
+	$(TK)/tool_perms.py --root $(CURDIR) snapshot $(TOOL)
 
-build: ## Render plugins/*/src/** in place, and instructions/* into dist/<plugin>/
+check-render: ## Fail if any plugins/*/src/** render or tools/*.permissions.json is stale
+	@for p in $(PLUGINS); do $(TK)/render.py --root $(CURDIR) --check plugins/$$p; done
+	@$(TK)/tool_perms.py --root $(CURDIR) --check
+
+build: ## Render plugins/*/src/** in place, tools/*.permissions.json from their snapshots, and instructions/* into dist/<plugin>/
 	@for p in $(PLUGINS); do $(TK)/render.py --root $(CURDIR) --tree plugins/$$p; done
+	@$(TK)/tool_perms.py --root $(CURDIR) --build
 	@for f in $(wildcard plugins/*/instructions/*); do \
 	  p=$$(echo $$f | cut -d/ -f2); out=$(DIST)/$$p/$$(basename $${f%.tmpl}); \
 	  $(TK)/render.py --root $(CURDIR) $$f $$out && echo "  $$out"; \

@@ -1,0 +1,5 @@
+# fakecli 1.0
+fakecli raw list
+fakecli things delete
+fakecli things get-one
+fakecli things list

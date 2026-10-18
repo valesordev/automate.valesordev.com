@@ -14,6 +14,13 @@ DIR defaults to the git toplevel of the working directory.
 - every agent and base role has a row in its plugin README's roles table,
   with the same assist level (the first L<n> in each)
 
+- every tool definition (plugins/*/tools/*.md, targets/*/tools/*.md) parses, is
+  named after its file, has a `kind` (cli) and a `domain`, has regexes that
+  compile, and has its snapshot when it has a `catalog`; one with `extends`
+  sets no `catalog`/`read_verbs`/`always_ask`; a target's own definition is
+  used by that target
+- every tool a target's _repo.md or roles name resolves
+
 Base roles named by `extends` may come from a dependency (deps.json).
 
 Exits 1 and lists every problem if any are found.
@@ -27,6 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
+import tool_perms  # noqa: E402
 from sources import Sources, repo_root  # noqa: E402
 
 ASSIST = re.compile(r"^Assist level: L([0-3])\b", re.M)
@@ -132,7 +140,52 @@ def check(root: Path) -> list[str]:
             if declared_level(composed) is None:
                 problems.append(f"{rel(f)}: composed role has no 'Assist level: L<n>' before "
                                 f"the first ## section (here or in its `extends` base)")
+        target = tjson.parent.name
+        names = install.tool_names(sources, target)
+        for name in names:
+            try:
+                install.resolve_tool(sources, target, name)
+            except SystemExit as e:
+                problems.append(f"{rel(tjson.parent)}: {e}")
+        for d in sorted((tjson.parent / "tools").glob("*.md")):
+            if d.stem not in names:
+                problems.append(f"{rel(d)}: no role or _repo.md in {target} names it in `tools:`")
+    for d in tool_perms.definitions(root):
+        problems += tool_problems(d, rel)
     return problems
+
+
+def tool_problems(d: Path, rel) -> list[str]:
+    where = rel(d)
+    try:
+        meta, _ = tool_perms.parse(d.read_text())
+    except ValueError as e:
+        return [f"{where}: {e}"]
+    out = []
+    if meta.get("tool") != d.stem:
+        out.append(f"{where}: `tool: {meta.get('tool')}` isn't the file name")
+    if meta.get("extends"):
+        out += [f"{where}: extends a definition, so it can't set `{k}` (the snapshot's definition does)"
+                for k in tool_perms.BASE_ONLY if k in meta]
+    else:
+        if meta.get("kind") not in tool_perms.KINDS:
+            out.append(f"{where}: `kind` must be one of {', '.join(tool_perms.KINDS)}")
+        if not meta.get("domain"):
+            out.append(f"{where}: no `domain` (what the tool is for)")
+        if meta.get("catalog") and not d.with_name(f"{d.stem}.commands.txt").is_file():
+            out.append(f"{where}: has a `catalog` but no {d.stem}.commands.txt "
+                       f"(make tool-snapshot TOOL={d.stem})")
+    inst = meta.get("instead_of") or {}
+    if not isinstance(inst, dict) or set(inst) - {"commands", "bash", "url"}:
+        out.append(f"{where}: `instead_of` takes only commands, bash, and url")
+        inst = {}
+    for k in ("bash", "url"):
+        for pat in tool_perms.listed(inst.get(k)):
+            try:
+                re.compile(pat)
+            except re.error as e:
+                out.append(f"{where}: instead_of.{k} {pat!r} doesn't compile ({e})")
+    return out
 
 
 def main(argv: list[str]) -> int:
