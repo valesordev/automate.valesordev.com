@@ -52,7 +52,9 @@ the story's lane (other roles' PRs only reference it). `Story-Done: <ID>` moves
 it review → done when the role may. Only merges into the default branch count. It fails, after applying the rest, if a
 lane's own story wasn't in-progress, or the role may not close a story.
 
-`/role none` may do anything. With no role set, every write is refused.
+`/role none` may do anything. With no role set, every write is refused. A
+role-free session (the coordinator's dispatcher, `/sprint-run`) doesn't take a
+role to comment: it posts with `.claude/bin/coordinator comment <ID> --to <role>`.
 Settings come from .claude/roles/_repo.md: project, story_prefix, github_repo,
 story_components (the --comp codes; default SRV, CLI, INF, CLT), and
 `stories: github`. Until a repo sets that (its cutover from docs/stories files),
@@ -275,9 +277,11 @@ class Who:
     def can_edit(self, what: str) -> bool:
         return self.unrestricted or what in self.meta.get("story_edits", [])
 
-    def require(self) -> None:
+    def require(self, comment: bool = False) -> None:
         if self.name is None:
-            raise StoryError("no role set for this session; ask the owner to run /role <name>")
+            raise StoryError("no role set for this session; ask the owner to run /role <name>" +
+                             (". A role-free dispatcher session doesn't take a role: it posts with "
+                              "`.claude/bin/coordinator comment <ID> --to <role>`" if comment else ""))
 
 
 def session_role(root: Path, sid: str | None) -> Who:
@@ -518,7 +522,7 @@ def post(b: Board, sid: str, head: str, text: str, author: str) -> str:
 
 
 def cmd_comment(b: Board, who: Who, a) -> str:
-    who.require()
+    who.require(comment=True)
     if bool(a.to) == bool(a.record):
         raise StoryError("give exactly one of --to ROLE or --record NAME")
     me = who.name if not who.unrestricted else "owner"
