@@ -664,6 +664,23 @@ def lane_git_config(env: dict, key: str) -> list[str]:
     return r.stdout.splitlines()
 
 
+def no_gc(repo: Path) -> None:
+    """No detached `git gc --auto` or `git maintenance run --auto`: one still writing .git/objects when
+    the test ends fails its cleanup (#11)."""
+    for k, v in (("gc.auto", "0"), ("gc.autoDetach", "false"), ("maintenance.auto", "false")):
+        subprocess.run(["git", "config", k, v], cwd=repo, check=True, capture_output=True)
+
+
+def cleanup(tmp: tempfile.TemporaryDirectory) -> None:
+    """Remove a test's scratch tree; once more after a moment if a straggler was still writing to it."""
+    try:
+        tmp.cleanup()
+    except OSError:
+        time.sleep(0.5)
+        shutil.rmtree(tmp.name, ignore_errors=True)
+        tmp.cleanup()
+
+
 def app_key() -> Path:
     key = Path(_KEYS.name) / "app.pem"
     if not key.exists():
@@ -714,6 +731,7 @@ class RunTest(unittest.TestCase):
         base = Path(self.tmp.name)
         self.origin = base / "origin.git"
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.origin)], check=True)
+        no_gc(self.origin)
         self.repo = base / "game-server"
         self.repo.mkdir()
         g = lambda *a: subprocess.run(["git", *a], cwd=self.repo, check=True, capture_output=True)  # noqa: E731
@@ -721,6 +739,7 @@ class RunTest(unittest.TestCase):
         g("config", "user.email", "t@t")
         g("config", "user.name", "t")
         g("config", "commit.gpgsign", "false")
+        no_gc(self.repo)
         r = subprocess.run([sys.executable, str(TOOLKIT / "install.py"), "--root", str(FIXTURE), "game-server", str(self.repo)],
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -770,7 +789,7 @@ class RunTest(unittest.TestCase):
 
     def tearDown(self):
         os.chdir(self.old)
-        self.tmp.cleanup()
+        cleanup(self.tmp)
 
     def go(self, *args, shell=None):
         shell = shell or FakeShell(SPRINT)
