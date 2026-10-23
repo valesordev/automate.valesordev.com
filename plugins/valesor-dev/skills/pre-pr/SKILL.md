@@ -116,8 +116,9 @@ a PR for yet) and when `$ARGUMENTS` contains `--no-codex`.
   into a denied path would.
 - Don't reuse an old marker. If you amend or rebase, HEAD changes and the gate
   closes again. That's intended.
-- Run `make check` (or any check) with `set -o pipefail`, and never judge it
-  through `| tail` or `| head`: the exit code you'd read is `tail`'s. Redirect
-  to a file and tail the file.
+- Never judge `make check` (or any check) through `| tail` or `| head`: the exit
+  code you'd read is `tail`'s, and the hook denies it. Start the command with
+  `set -o pipefail;`, or redirect to a file and tail the file. In a coordinator
+  lane, run the check on its own, with no pipe or redirect.
 - Dates in records (ADRs, close-outs) come from `date +%F`, never from memory.
 - Mutation testing happens in the reviewer's own worktree, never in yours.
