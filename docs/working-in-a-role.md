@@ -26,7 +26,9 @@ A hook on `Bash`:
 
 - denies `gh pr create` without the role's `role:<role>` label, or with another role's;
 - denies `git add -A` / `git add .`, `git commit -a`, and discarding uncommitted changes (`git restore`, `checkout -f`, `reset --hard`, …), in every mode;
-- denies `git push` and `gh pr create` until `/pre-pr` has reviewed the commits being pushed;
+- denies deleting, moving, or truncating untracked local env files (`.envrc`, `.env`, `.env.*`, `.netrc`, `.tool-versions`) with `rm`, `mv`, `git clean`, or `>`, in every mode, subagents included;
+- denies piping the check command (`make check`, `make test`) into `tail`, `head`, or `grep` without `set -o pipefail`, since the exit status read would be the reader's;
+- denies `git push` and `gh pr create` until `/pre-pr` has reviewed the commits being pushed. `role reviewed` runs as its own call, not chained with the push;
 - denies raw `gh issue` / `gh project` writes to stories: roles change stories with `.claude/bin/story`, within their `transitions:`.
 
 The hooks guard Claude's tools, not every shell write. Every charter forbids routing around a denial.

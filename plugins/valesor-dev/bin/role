@@ -38,7 +38,10 @@ Every PR a role opens carries the label `role:<role>`; hook-pre-bash denies a
 `gh pr create` without it.
 
 hook-pre-bash also denies, in every mode, `git add -A`/`.`, `git commit -a`,
-`pkill -f`, and restore/checkout/reset --hard/switch -f over uncommitted changes.
+`pkill -f`, restore/checkout/reset --hard/switch -f over uncommitted changes,
+rm/mv/git clean/`>` on untracked local env files (.envrc, .env, .env.*, .netrc,
+.tool-versions), and the check command (`role check-cmd`, `make check`, `make test`)
+piped into a reader (tail, head, grep, …) without `set -o pipefail` or PIPESTATUS.
 
 Story guard: in a repo with `project:` in _repo.md, hook-pre-bash denies raw
 `gh issue edit/close/reopen/delete/transfer` on story issues, non-read `gh project`
@@ -55,6 +58,7 @@ asks instead. Markers live in <git-common-dir>/claude-roles/.reviewed/<sha>.
 from __future__ import annotations
 
 import fnmatch
+import glob
 import json
 import os
 import re
@@ -86,7 +90,15 @@ GIT_BUILTINS = set("""add am apply archive bisect blame branch bundle cat-file c
 PUSH_OPTS_WITH_VALUE = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
 GH_OPTS_WITH_VALUE = {"-R", "--repo"}
 # Git and shell guards: denied in every mode, because they lose work or hit other sessions.
-GUARDED_GIT = {"add", "commit", "restore", "checkout", "reset", "switch"}
+GUARDED_GIT = {"add", "commit", "restore", "checkout", "reset", "switch", "clean"}
+GUARD_KINDS = {"pkill", "rm", "mv", "redirect", "piped check"}
+# Machine-local config, often secrets: git can't restore them when they're untracked.
+ENV_FILES = {".envrc", ".env", ".netrc", ".tool-versions"}
+ENV_WALK_PRUNE = {".git", "node_modules"}
+ENV_WALK_MAX = 20000   # entries looked at under one directory before giving up (allow)
+REMOVERS = {"rm", "unlink", "mv"}
+PIPE_READERS = {"tail", "head", "grep", "egrep", "fgrep", "rg", "less", "more", "tee"}
+MV_OPTS_WITH_VALUE = {"-t", "--target-directory", "-S", "--suffix"}
 ADD_OPTS_WITH_VALUE = {"--chmod", "--pathspec-from-file"}
 ADD_EVERYTHING = {".", "./", ":/", ":", "*"}
 COMMIT_OPTS_WITH_VALUE = {"-m", "--message", "-F", "--file", "-C", "--reuse-message", "-c",
@@ -107,6 +119,7 @@ GUARD_LONGS = {
     "git reset": ["--hard", "--soft", "--mixed", "--merge", "--keep"],
     "git switch": ["--discard-changes", "--force", "--create", "--force-create", "--orphan",
                    "--conflict"],
+    "git clean": ["--force", "--interactive", "--dry-run", "--quiet", "--exclude"],
     "pkill": ["--full", "--pgroup", "--group", "--parent", "--session", "--terminal", "--euid",
               "--uid", "--pidfile", "--signal", "--ns", "--nslist"],
 }
@@ -1011,28 +1024,39 @@ def _tokens(text: str) -> list[str]:
 OPEN, CLOSE = ["\0("], ["\0)"]  # subshell boundaries, kept as sentinel segments
 
 
+class Seg(list):
+    """A simple command's words, with its redirections (operator, target) and whether its
+    output pipes into the next segment."""
+    def __init__(self):
+        super().__init__()
+        self.redirs: list[tuple[str, str]] = []
+        self.piped = False
+
+
 def _segments(tokens: list[str]) -> list[list[str]]:
-    """Simple commands, with redirections (and their targets) removed."""
+    """Simple commands, with redirections (and their targets) removed into Seg.redirs."""
     segs: list[list[str]] = []
-    cur: list[str] = []
-    skip = False
+    cur = Seg()
+    op: str | None = None
     for t in tokens:
-        if skip:
-            skip = False
+        if op is not None:
+            cur.redirs.append((op, t))
+            op = None
             continue
         if t and all(ch in PUNCT for ch in t):
             if "<" in t or ">" in t:
                 if cur and cur[-1].isdigit():
                     cur.pop()  # the fd in `2>`
-                skip = True  # the redirection target
+                op = t  # the next token is the redirection target
                 continue
-            if cur:
+            cur.piped = t in ("|", "|&")
+            if cur or cur.redirs:
                 segs.append(cur)
-            cur = []
+            cur = Seg()
             segs.extend(OPEN if ch == "(" else CLOSE for ch in t if ch in "()")
         else:
             cur.append(t)
-    if cur:
+    if cur or cur.redirs:
         segs.append(cur)
     return segs
 
@@ -1123,7 +1147,34 @@ def _gated_git(rest: list[str], where: Path, depth: int) -> list[Gated]:
     return _gated_git(words + args, where, depth + 1)
 
 
-def gated_commands(command: str, cwd: Path, depth: int = 0) -> list[Gated]:
+def _command_at(seg: list[str], names: set[str]) -> list[str] | None:
+    """The segment's words from the command it runs, if that is one of `names`, reached through
+    assignments, keywords, and wrappers (`sudo rm`, `timeout 600 make`)."""
+    i = 0
+    while i < len(seg) and (VAR_RE.match(seg[i]) or seg[i] in PREFIX_WORDS):
+        i += 1
+    if i < len(seg) and os.path.basename(seg[i]) in WRAPPERS:
+        i = next((k for k in range(i + 1, len(seg)) if os.path.basename(seg[k]) in names), len(seg))
+    return seg[i:] if i < len(seg) and os.path.basename(seg[i]) in names else None
+
+
+def _sets_pipefail(words: list[str]) -> bool | None:
+    """True for `set -o pipefail` / `setopt pipefail`, False for `set +o pipefail`, else None."""
+    if not words or "pipefail" not in words:
+        return None
+    if words[0] == "setopt":
+        return True
+    if words[0] == "set":
+        k = words.index("pipefail")
+        flag = words[k - 1] if k > 0 else ""
+        if flag.startswith("-") and flag.endswith("o"):
+            return True
+        if flag.startswith("+") and flag.endswith("o"):
+            return False
+    return None
+
+
+def gated_commands(command: str, cwd: Path, depth: int = 0, pipefail: bool = False) -> list[Gated]:
     """Every `git push` and `gh pr create` in a shell command, with the dir it runs in."""
     found: list[Gated] = []
     text, nested = _prescan(_strip_heredocs(command))
@@ -1133,13 +1184,32 @@ def gated_commands(command: str, cwd: Path, depth: int = 0) -> list[Gated]:
     scopes: list[Path] = []  # cwd at each open subshell
     dirstack: list[Path] = []
     oldpwd = cwd
-    for seg in _segments(_tokens(text)):
+    pipestatus = re.search(r"pipestatus", command, re.I) is not None
+    segs = _segments(_tokens(text))
+    for k, seg in enumerate(segs):
         if seg is OPEN:
             scopes.append(cwd)
             continue
         if seg is CLOSE:
             cwd = scopes.pop() if scopes else cwd
             continue
+        for op, target in getattr(seg, "redirs", []):
+            dup = op.endswith("&") and (target.isdigit() or target == "-")
+            if ">" in op and ">>" not in op and "<>" not in op and not dup:
+                found.append(Gated("redirect", cwd, [target]))   # truncates the target
+        nxt = segs[k + 1] if k + 1 < len(segs) else []
+        if getattr(seg, "piped", False) and not (pipefail or pipestatus) \
+                and nxt is not OPEN and nxt is not CLOSE:
+            reader = _command_at(nxt, PIPE_READERS)
+            if reader:
+                found.append(Gated("piped check", cwd, [os.path.basename(reader[0]), *seg]))
+        stripped = [t for t in seg if not VAR_RE.match(t) and t not in PREFIX_WORDS]
+        pf = _sets_pipefail(stripped)
+        if pf is not None:
+            pipefail = pf
+        remover = _command_at(seg, REMOVERS)
+        if remover:
+            found.append(Gated(os.path.basename(remover[0]).replace("unlink", "rm"), cwd, remover[1:]))
         where = cwd
         via: list[str] = []
         while seg:
@@ -1179,11 +1249,11 @@ def gated_commands(command: str, cwd: Path, depth: int = 0) -> list[Gated]:
             if dirstack:
                 oldpwd, cwd = cwd, dirstack.pop()
         elif head in SHELLS and depth < 3:
-            flag = next((k for k, t in enumerate(rest) if SHELL_C_RE.match(t)), None)
+            flag = next((j for j, t in enumerate(rest) if SHELL_C_RE.match(t)), None)
             if flag is not None:
                 body = next((t for t in rest[flag + 1:] if not t.startswith("-")), None)
                 if body:
-                    found += gated_commands(body, where, depth + 1)
+                    found += gated_commands(body, where, depth + 1, "pipefail" in rest[:flag])
         elif head in ("eval", "watch") and depth < 3:
             found += gated_commands(" ".join(t for t in rest if not t.startswith("-")),
                                     where, depth + 1)
@@ -1489,6 +1559,114 @@ def _checkout_paths(where: Path, args: list[str]) -> tuple[list[str] | None, boo
     return [p for p in pos if _ref(where, p) is None], False
 
 
+def _is_env_file(name: str) -> bool:
+    return name in ENV_FILES or name.startswith(".env.")
+
+
+def _tracked(path: Path) -> bool:
+    return subprocess.run(["git", "-C", str(path.parent), "ls-files", "--error-unmatch", "--", path.name],
+                          capture_output=True).returncode == 0
+
+
+def _env_files_under(d: Path) -> list[Path]:
+    """Untracked env files anywhere under `d` (pruning .git and node_modules; a huge tree is skipped)."""
+    hits, seen = [], 0
+    for top, dirs, files in os.walk(d):
+        dirs[:] = [x for x in dirs if x not in ENV_WALK_PRUNE]
+        seen += len(dirs) + len(files)
+        if seen > ENV_WALK_MAX:
+            return hits
+        hits += [Path(top) / f for f in files if _is_env_file(f) and not _tracked(Path(top) / f)]
+    return hits
+
+
+def _env_files_hit(where: Path, paths: list[str], recursive: bool) -> list[str]:
+    """The untracked env files these paths name (globs expanded as the shell would), or hold when
+    `recursive` and a path is a directory."""
+    hits: list[str] = []
+    for p in paths:
+        p = os.path.expandvars(p)
+        for m in (sorted(glob.glob(p, root_dir=where)) if glob.has_magic(p) else [p]):
+            full = _path(where, m)
+            if full.is_symlink() or full.is_file():
+                if _is_env_file(full.name) and not _tracked(full):
+                    hits.append(m)
+            elif recursive and full.is_dir():
+                hits += [os.path.join(m, os.path.relpath(h, full)) for h in _env_files_under(full)]
+    return hits
+
+
+def _git_clean_hits(where: Path, args: list[str]) -> list[str]:
+    """Env files `git clean` would remove, from its own dry run (-n) with the same options."""
+    if any(a == "--dry-run" or _short(a, "n", "e") for a in args):
+        return []   # already a dry run
+    dry: list[str] = []
+    for a in args:
+        if a in ("--force", "--interactive", "--quiet"):
+            continue
+        if a.startswith("-") and not a.startswith("--") and a != "-":
+            e = a.find("e")   # -e takes the rest of the cluster as its value
+            flags, value = (a[1:e], a[e:]) if e > 0 else (a[1:], "")
+            a = "-" + "".join(c for c in flags if c not in "fiq") + value
+            if a == "-":
+                continue
+        dry.append(a)
+    r = subprocess.run(["git", "-C", str(where), "clean", "-n", *dry], capture_output=True, text=True)
+    hits: list[str] = []
+    for line in r.stdout.splitlines():
+        rel = line.removeprefix("Would remove ").strip()
+        full = _path(where, rel)
+        if rel.endswith("/"):
+            hits += [os.path.join(rel, os.path.relpath(h, full)) for h in _env_files_under(full)]
+        elif _is_env_file(full.name):
+            hits.append(rel)
+    return hits
+
+
+def _env_file_problem(g: Gated, args: list[str]) -> str | None:
+    if g.kind == "redirect":
+        hits = _env_files_hit(g.where, args, False)
+        what = "a `>` redirect would truncate"
+    elif g.kind == "git clean":
+        hits = _git_clean_hits(g.where, args)
+        what = "git clean would remove"
+    else:
+        with_value = MV_OPTS_WITH_VALUE if g.kind == "mv" else set()
+        opts, pos = _split_opts(args, with_value)
+        recursive = g.kind == "rm" and any(n in ("--recursive",) or _short(n, "r") or _short(n, "R")
+                                           for n, _ in opts)
+        hits = _env_files_hit(g.where, pos, recursive)
+        what = f"{g.kind} would {'move' if g.kind == 'mv' else 'delete'}"
+    if not hits:
+        return None
+    shown = ", ".join(hits[:5]) + (f" (+{len(hits) - 5} more)" if len(hits) > 5 else "")
+    return (f"{what} {shown}: untracked local env files (machine-local config, often secrets) that git "
+            f"can't restore. Stop and ask the owner; nothing in a task calls for touching them.")
+
+
+def _is_check(words: list[str], check: list[str]) -> bool:
+    if any(words[i:i + len(check)] == check for i in range(len(words))):
+        return True
+    make = next((i for i, w in enumerate(words) if os.path.basename(w) == "make"), None)
+    return make is not None and any(w in ("check", "test") for w in words[make + 1:])
+
+
+def _masked_check_problem(g: Gated) -> str | None:
+    reader, words = g.args[0], g.args[1:]
+    root = repo_root(g.where) if g.where.exists() else None
+    check = check_command(Roles(root)) if root else DEFAULT_CHECK
+    try:
+        check_words = shlex.split(check)
+    except ValueError:
+        check_words = check.split()
+    if not check_words or not _is_check(words, check_words):
+        return None
+    return (f"`{' '.join(words)} | {reader}` exits with {reader}'s status, not the check's, so a failing "
+            f"check reads as green. Start the command with `set -o pipefail;` (`set -o pipefail; {check} "
+            f"2>&1 | tail -50`), or redirect to a file and read it: `{check} > /tmp/check.log 2>&1; "
+            f"echo exit=$?; tail -50 /tmp/check.log`.")
+
+
 def guard_problem(g: Gated) -> str | None:
     """Why a guarded git or shell command is denied, or None if it's safe here."""
     opts_for = {"git add": ADD_OPTS_WITH_VALUE, "git commit": COMMIT_OPTS_WITH_VALUE,
@@ -1496,6 +1674,10 @@ def guard_problem(g: Gated) -> str | None:
                 "git switch": SWITCH_OPTS_WITH_VALUE}
     args = _expand_longs(g.args, GUARD_LONGS.get(g.kind, []))
     forced_to: str | None = None  # the commit a forced switch or hard reset moves to
+    if g.kind in ("rm", "mv", "redirect", "git clean"):
+        return _env_file_problem(g, args)
+    if g.kind == "piped check":
+        return _masked_check_problem(g)
     if g.kind == "pkill":
         opts, _ = _split_opts(args, PKILL_OPTS_WITH_VALUE)
         if any(n == "--full" or _short(n, "f", "gGPstuUF") for n, _ in opts):
@@ -2377,14 +2559,16 @@ def hook_pre_bash(args: list[str]) -> int:
             problem = lane_problem(g, data.get("session_id", ""))
             if problem:
                 return _decision("deny", f"coordinator lane {lane}: {problem}")
+    # `role reviewed && git push`: the gate judges the whole command before the marker exists
+    chained_review = any(g.kind == "repo tool" and g.args[:2] == ["role", "reviewed"] for g in found)
     found = [g for g in found if g.kind not in LANE_ONLY and g.kind != "prefix"]
-    for g in found:  # guards apply in every mode, with or without a role or a role repo
-        if g.kind == "pkill" or g.kind.removeprefix("git ") in GUARDED_GIT:
-            problem = guard_problem(g)
-            if problem:
-                return _decision("deny", problem)
+    guarded = [g for g in found if g.kind in GUARD_KINDS or g.kind.removeprefix("git ") in GUARDED_GIT]
+    for g in guarded:  # guards apply in every mode, with or without a role or a role repo
+        problem = guard_problem(g)
+        if problem:
+            return _decision("deny", problem)
     for g in found:
-        if g.kind == "pkill" or g.kind.removeprefix("git ") in GUARDED_GIT:
+        if g in guarded:
             continue
         root = repo_root(g.where)
         if root is None:
@@ -2427,8 +2611,13 @@ def hook_pre_bash(args: list[str]) -> int:
             problem = push_problem(root, g.args)
         if problem is None:
             continue
-        reason = (f"{g.kind}: {problem}. Run /pre-pr (checks plus the adversarial review) "
-                  f"first; any new commit needs a fresh review.")
+        if chained_review and "hasn't passed /pre-pr" in problem:
+            reason = (f"{g.kind}: `role reviewed` must run as its own Bash call: the gate checks the "
+                      f"whole command before the marker is written. Run `.claude/bin/role reviewed` "
+                      f"alone, then {g.kind} in a separate call.")
+        else:
+            reason = (f"{g.kind}: {problem}. Run /pre-pr (checks plus the adversarial review) "
+                      f"first; any new commit needs a fresh review.")
         if role != UNRESTRICTED:
             return _decision("deny", reason)
         asks.append(reason)
