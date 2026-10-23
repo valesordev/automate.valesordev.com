@@ -334,6 +334,63 @@ class RoleTest(unittest.TestCase):
         self.assert_guard("deny", ("pkill -f server",), cwd=outside)
         self.assertIn("kill <pid>", self.bash("pkill -f x")["permissionDecisionReason"])
 
+    def test_guard_protects_untracked_env_files(self):
+        """#42: a subagent deleted an untracked .envrc that git couldn't restore."""
+        self.commit(".env.example")
+        for name in (".envrc", ".env.local", ".netrc", ".tool-versions"):
+            (self.repo / name).write_text("SECRET=1\n")
+        (self.repo / ".gitignore").write_text(".env.local\n")
+        (self.repo / "svc").mkdir()
+        (self.repo / "svc/.env").write_text("x")
+        (self.repo / "build").mkdir()
+        (self.repo / "build/out.o").write_text("x")
+        bad = ("rm .envrc", "rm -f .env.local", "unlink .netrc", "rm .tool-versions", "sudo rm .envrc",
+               "rm -rf svc", "rm -r .", "rm -f .env*", "mv .envrc .envrc.bak", "mv x.txt .envrc",
+               ": > .envrc", "echo x >.env.local", "echo x >| .envrc", "cat a &> .envrc",
+               "git clean -fdx", "git clean -fd", "git clean -fX", "git clean -ffxd", "git clean -fx -e build",
+               "cd svc && rm .env", "bash -c 'rm .envrc'", "rm $HOME/../../" + str(self.repo) + "/.envrc")
+        ok = ("rm .env.example", "rm -f .env.example", "rm svc", "rm -rf build", "echo x >> .envrc",
+              "cat .envrc", "rm -f .env.missing", "echo x > .env.new", "cmd 2>&1 > out.log",
+              "git clean -n -x", "git clean -fd build", "mv .env.example docs.example", "rm -f *.txt")
+        for role in (None, "none", "impl"):
+            if role:
+                self.set_role(role)
+            self.assert_guard("deny", bad)
+            self.assert_guard("allow", ok)
+        reason = self.bash("rm -rf svc")["permissionDecisionReason"]
+        self.assertIn("svc/.env", reason)
+        self.assertIn("ask the owner", reason)
+        self.assertIn(".envrc", self.bash("git clean -fdx")["permissionDecisionReason"])
+        self.assertTrue((self.repo / ".envrc").exists())   # the dry run removed nothing
+        outside = Path(self.tmp.name) / "plain"
+        outside.mkdir()
+        (outside / ".envrc").write_text("x")
+        self.assert_guard("deny", ("rm .envrc",), cwd=outside)   # outside a repo: never tracked
+
+    def test_guard_denies_check_masked_by_a_pipe(self):
+        """#37: `make check | tail` reports tail's exit status, so a failing check reads as green."""
+        bad = ("make check | tail", "make check 2>&1 | tail -20", "make test | grep FAIL",
+               "make -j4 check |& head", "timeout 600 make check | tail", "bash -c 'make check | tail'",
+               "make check | tee check.log", "cd sub && make check 2>&1 | less",
+               "set +o pipefail; make check | tail")
+        ok = ("set -o pipefail; make check | tail", "set -euo pipefail\nmake check 2>&1 | tail -5",
+              "make check > /tmp/check.log 2>&1; echo exit=$?; tail -50 /tmp/check.log",
+              "make check | tail; echo ${PIPESTATUS[0]}", "bash -o pipefail -c 'make check | tail'",
+              "make build | tail", "git log | head", "make check", "make check | wc -l",
+              "grep 'make check' README.md | head")
+        for role in (None, "impl"):
+            if role:
+                self.set_role(role)
+            self.assert_guard("deny", bad)
+            self.assert_guard("allow", ok)
+        reason = self.bash("make check | tail")["permissionDecisionReason"]
+        self.assertIn("set -o pipefail; make check 2>&1 | tail -50", reason)
+        repo_md = self.repo / ".claude/roles/_repo.md"
+        repo_md.write_text(repo_md.read_text().replace("check: make check", "check: go test ./..."))
+        self.assert_guard("deny", ("go test ./... | tail", "make check | tail"))
+        self.assert_guard("allow", ("go vet ./... | tail",))
+        self.assertIn("set -o pipefail; go test ./... 2>&1", self.bash("go test ./... | tail")["permissionDecisionReason"])
+
     def mark_reviewed(self):
         r = run(self.role, "reviewed", cwd=self.repo)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -715,7 +772,7 @@ class RoleTest(unittest.TestCase):
             d = self.lane(cmd)
             self.assertEqual(d["permissionDecision"], "deny", cmd)
         self.assertIn("generated", self.lane("echo x > gen/x.go")["permissionDecisionReason"])
-        for cmd in ("echo x > server/a.go", "grep -c x < Makefile", "make check 2>&1 | tail -5",
+        for cmd in ("echo x > server/a.go", "grep -c x < Makefile", "set -o pipefail; make check 2>&1 | tail -5",
                     "echo x > /dev/null"):
             self.assertEqual(self.lane(cmd)["permissionDecision"], "allow", cmd)
 
@@ -786,7 +843,7 @@ class RoleTest(unittest.TestCase):
         self.reviewed_branch("impl/x")
         for cmd in ("grep -rn token .", "grep -n x f.txt | head -5", "head -n 20 f.txt", "tail -5 f.txt",
                     "wc -l f.txt base.txt", "ls server", "diff f.txt base.txt", "grep -e x -e y f.txt",
-                    "make check 2>&1 | tail -40", "go test ./server/... -run 'Tag|Force' -count=1",
+                    "make build 2>&1 | tail -40", "go test ./server/... -run 'Tag|Force' -count=1",
                     "make test PKG=./server/store/...", "go vet ./...", "grep -n -- -x f.txt"):
             self.assertEqual(self.lane(cmd)["permissionDecision"], "allow", cmd)
         for cmd in ("grep -rn token /etc", "grep token ~/.config/gh/hosts.yml", "head /proc/self/environ",
@@ -971,7 +1028,7 @@ class RoleTest(unittest.TestCase):
         for cmd in ("git status", "git commit -m 'A=1'", "git commit -m \"x=$(git rev-parse --short HEAD)\"",
                     "WT=$(mktemp -d)/review && git worktree add --detach \"$WT\" HEAD",
                     "git commit -m \"$(date +%F) $(basename $PWD)\"", "git log -1 > /dev/null",
-                    "git log -1 2>&1", "make check 2>&1 | tail -50", "git log -p > server/log.txt",
+                    "git log -1 2>&1", "make build 2>&1 | tail -50", "git log -p > server/log.txt",
                     "git log -p >> server/x.md", "git log >| server/notes.md",   # paths the role owns "git diff 2> /dev/null", "git log -1 >&2",
                     "gh pr comment 5 --body-file - <<'EOF'\nhello\nEOF", "gh pr comment 5 --body-file - <<< hi",
                     "git commit -m \"$(git log -1 --format=%s)\"", "git commit -m \"$(wc -l < f.txt) lines\"",
@@ -1322,6 +1379,25 @@ class RoleTest(unittest.TestCase):
         self.assertEqual(self.pr("git push origin nosuchref")["permissionDecision"], "deny")
         self.set_role("none")
         self.assertEqual(self.pr("git push")["permissionDecision"], "ask")
+
+    def test_review_gate_names_a_chained_role_reviewed(self):
+        """#36: `role reviewed && git push` is judged before the marker exists; say so, not "run /pre-pr"."""
+        self.set_role("impl")
+        self.commit()
+        run("git", "switch", "-qc", "impl/x", cwd=self.repo)
+        for cmd in (".claude/bin/role reviewed && git push -u origin HEAD",
+                    ".claude/bin/role reviewed; gh pr create -l role:implementation --fill",
+                    f"{self.repo}/.claude/bin/role reviewed\ngit push",
+                    "python3 .claude/bin/role reviewed && git push"):
+            d = self.pr(cmd)
+            self.assertEqual(d["permissionDecision"], "deny", cmd)
+            self.assertIn("must run as its own Bash call", d["permissionDecisionReason"], cmd)
+            self.assertNotIn("Run /pre-pr", d["permissionDecisionReason"], cmd)
+        d = self.pr("git push")
+        self.assertIn("Run /pre-pr", d["permissionDecisionReason"])   # no chain: the usual advice
+        self.assertNotIn("must run as its own", d["permissionDecisionReason"])
+        self.mark_reviewed()
+        self.assertEqual(self.pr("git push -u origin HEAD")["permissionDecision"], "allow")
 
     def test_review_gate_follows_git_dash_c(self):
         self.set_role("impl")
