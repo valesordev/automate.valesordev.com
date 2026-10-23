@@ -483,6 +483,17 @@ class StoryTest(unittest.TestCase):
         self.record(3, "Observability review (owner)")
         self.assertEqual(self.run_story("status", "GS-SRV-002", "ready")[0], 0)
 
+    def test_pm_blocks_ready_stories_and_architecture_readies_them(self):
+        """#40: the readiness scan marks a failing ready story blocked; review stories stay put."""
+        self.as_role("pm")
+        code, out = self.run_story("status", "GS-SRV-001", "blocked", "--note", "AC 3 needs make chaos-drill; sre clears it")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status("GS-SRV-001"), "blocked")
+        self.assertEqual(self.run_story("status", "GS-SRV-003", "blocked")[0], 1)   # review: never moved
+        self.assertEqual(self.run_story("status", "GS-SRV-001", "ready")[0], 1)     # unblocking is architecture's
+        self.as_role("arch")
+        self.assertEqual(self.run_story("status", "GS-SRV-001", "ready")[0], 0)
+
     def test_unrestricted_moves_without_records_with_a_warning(self):
         self.as_role("none")
         code, out = self.run_story("status", "GS-SRV-003", "done")

@@ -41,7 +41,7 @@ A role can name the CLIs it uses for an outside system, such as `gcx` for Grafan
 
 For a repo whose stories live on a GitHub Project (`stories: github`, `sprints: project`):
 
-1. **pm** plans and activates the sprint (`/pm-start-sprint`).
+1. **pm** plans and activates the sprint (`/pm-start-sprint`). Its readiness scan finds what would stop each story's role, grouped by the role that clears it, marks failing `ready` stories `blocked`, and names the role to run first. `/readiness-scan` runs it again mid-sprint, and `/sprint-run` runs it read-only before starting lanes.
 2. **sre** reviews each story's observability, then **architecture** reviews its contract (`/sre-start-sprint`, `/arch-start-sprint`).
 3. Builders (`implementation`, `sre`, `visual-designer`) pull their lane's stories and build them; a merge moves a story to `review`.
 4. **architecture** checks each story against the definition of done and moves it to `done`.

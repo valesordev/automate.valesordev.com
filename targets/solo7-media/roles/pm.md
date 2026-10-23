@@ -4,8 +4,8 @@ summary: Sprint plans, groomed stories, and sprint close-outs
 aliases: [project-management, project-manager]
 branch_prefix: pm/
 writes: [docs/sprints/, docs/roadmap.md, docs/glossary.md]
-skills: [pm-start-sprint, pm-close-sprint]
-transitions: [new>draft]
+skills: [pm-start-sprint, pm-close-sprint, readiness-scan]
+transitions: [new>draft, ready>blocked]
 story_edits: [body, depends, Sprint, Plan, Rank, Lane, Size, Risk, Component]
 ---
 # Role: PROJECT MANAGEMENT

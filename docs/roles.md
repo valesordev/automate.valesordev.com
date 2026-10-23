@@ -5,7 +5,7 @@ The roles `valesor-dev` supports. A repo runs a role only if its target has the 
 | Role | `/role` name (aliases) | Branch | Usually owns | Assist level | Skills |
 |---|---|---|---|---|---|
 | Product | `product` (`po`) | `product/` | `docs/product/`: vision, releases (`R<n>`), feature briefs (`FEAT-NN`), release reviews | L3 Delegate | `/release-plan`, `/feature-brief`, `/release-review`, `/product-triage` |
-| Project manager | `pm` | `pm/` | Sprints, the roadmap (every milestone names its release), epics, new stories at `draft` | L2 Pair | `/pm-start-sprint`, `/pm-close-sprint` |
+| Project manager | `pm` | `pm/` | Sprints, the roadmap (every milestone names its release), epics, new stories at `draft` | L2 Pair | `/pm-start-sprint`, `/pm-close-sprint`, `/readiness-scan` |
 | Architecture | `architecture` (`arch`) | `arch/` | ADRs, specs (not SLOs), contract review, the definition-of-done review that moves stories to `done` | L2 Pair | `/arch-start-sprint` |
 | Site reliability | `sre` (`ops`) | `sre/` | Deploy config, CI, the `Makefile`, scripts, runbooks, SLOs, observability review | L2 Pair (ops L3) | `/sre-start-sprint` |
 | Implementation | `implementation` (`impl`) | `impl/` | Application source and its tests | L2 Pair | `/impl-start-sprint` |

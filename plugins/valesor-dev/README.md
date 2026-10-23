@@ -18,7 +18,7 @@ Don't do both in one repo, or its skills and hooks run twice.
 
 | Role | Assist level | Why | Skills |
 |---|---|---|---|
-| `pm` (target) | L2 Pair | The owner sets scope and priority; the agent plans and grooms | `pm-start-sprint`, `pm-close-sprint` |
+| `pm` (target) | L2 Pair | The owner sets scope and priority; the agent plans and grooms | `pm-start-sprint`, `pm-close-sprint`, `readiness-scan` |
 | `architecture` (target) | L2 Pair | The owner makes design rulings; the agent drafts contracts and reviews | `arch-start-sprint` |
 | `implementation` (target) | L2 Pair | The owner makes key decisions and merges; the agent builds and verifies | `impl-start-sprint` |
 | `sre` (base) | L2 Pair (ops L3) | The owner sets SLOs and error-budget policy | `sre-start-sprint` |
@@ -136,6 +136,8 @@ Like the review gate, it's a parser and guards what it can see.
 - `sprint-state` reads these issues instead of `docs/sprints/` and applies the same rules: exactly one open sprint, and only the highest-numbered one.
 - Roles with `Sprint` in `story_edits` change sprints with `story sprint plan|activate|close|body <N>`, in the order close N, then plan N+1, then activate it.
 - The story guard covers sprint issues.
+
+**Readiness scan.** `/readiness-scan` (PM) checks a sprint's `ready` and `review` stories for what would stop the role that picks them up: acceptance criteria that can't run on `origin/main` yet, records a move still needs (`story check`), contract inconsistencies the files show (a duplicate or reserved proto field number, a cited spec or path that doesn't exist), and decisions that exist only in comments or chat. It reports them grouped by the role that has to clear each, names the role to run first, and, after the owner's go-ahead, moves each failing `ready` story to `blocked` with a note plus a `story comment --to <role>`. That needs `ready>blocked` in PM's `transitions:`, and architecture's `blocked>ready` brings it back. Lanes skip `blocked` stories. `review` stories are reported, never moved: they stay on the §8 queue, and the record gate already holds them. The planning procedure (`pm-start-sprint`, `pm-close-sprint`) runs it at its checkpoint, and `/sprint-run`'s dispatcher runs it with `--report` (no role, no writes) before it plans lanes.
 
 **Required records.** A role's `records: [from>to: Name, …]` lists the records it owes before a move, for example SRE's `records: [draft>ready: Observability review, review>done: §8 instrumentation]` and architecture's `records: [review>done: §8]`. A record is a `**<Name> (<role>):**` comment, as `story comment <ID> --record <Name>` writes it, posted since the story last entered the move's from-status, so a rework round needs fresh records. The owner's record (`(owner)`, from `/role none`) stands in for any role's. `story status` and `story merged` (`Story-Done:`) refuse a move with any record missing and list them all, each with its role. `/role none` moves anyway and prints a warning. `story check` is the read-only version. The gate checks that a record exists, not what it says: a failed §8 is recorded and the story stays at `review` by the reviewer's judgment. Roles that aren't enabled owe nothing, so a target without SRE doesn't wait on SRE.
 - Stories record their sprint in the Project's `Sprint` field. As a number field it takes `5`, `05` or `SPRINT-05` in `story set` and `story list --sprint`. Number fields need no options, and options can't be created over REST.
