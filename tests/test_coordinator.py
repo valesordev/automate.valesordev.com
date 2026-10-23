@@ -2389,7 +2389,8 @@ Assist level: L2 — drafts brand docs; the owner decides.
             self.assertIn(want, allow)
         prompt = sh.started[0]["cmd"][sh.started[0]["cmd"].index("-p") + 1]
         self.assertIn("One command per Bash call", prompt)     # a chain is denied whole for one unlisted part
-        self.assertIn("never redirected to a file", prompt)
+        self.assertIn("on its own, with no pipe and no redirect", prompt)   # the hook denies a piped check
+        self.assertNotIn("piped to `tail`", prompt)
         for never in ("Bash(gh pr merge:*)", "Bash(gh:*)", "Bash(git:*)", "Bash(*)", "Bash",
                       "Bash(gh pr close:*)", "Bash(gh pr review:*)", "Bash(git reset:*)", "Bash(rm:*)",
                       "Bash(git branch:*)", "Bash(gh issue close:*)", "Bash(gh search issues:*)"):

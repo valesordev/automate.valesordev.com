@@ -775,9 +775,13 @@ class RoleTest(unittest.TestCase):
             d = self.lane(cmd)
             self.assertEqual(d["permissionDecision"], "deny", cmd)
         self.assertIn("generated", self.lane("echo x > gen/x.go")["permissionDecisionReason"])
-        for cmd in ("echo x > server/a.go", "grep -c x < Makefile", "set -o pipefail; make check 2>&1 | tail -5",
-                    "echo x > /dev/null"):
+        for cmd in ("echo x > server/a.go", "grep -c x < Makefile", "make check", "echo x > /dev/null"):
             self.assertEqual(self.lane(cmd)["permissionDecision"], "allow", cmd)
+        # the check piped into a reader hides its exit status; a lane runs it alone (no `set`, no file)
+        d = self.lane("make check 2>&1 | tail -5")
+        self.assertEqual(d["permissionDecision"], "deny")
+        self.assertIn("In a lane, run `make check` on its own", d["permissionDecisionReason"])
+        self.assertNotIn("pipefail", d["permissionDecisionReason"])
 
     def test_a_lane_publishes_no_files_from_outside_its_worktree(self):
         self.reviewed_branch("impl/x")

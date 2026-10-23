@@ -1668,6 +1668,10 @@ def _masked_check_problem(g: Gated) -> str | None:
         check_words = check.split()
     if not check_words or not _is_check(words, check_words):
         return None
+    if os.environ.get("COORDINATOR_LANE"):   # a lane's allow-list has no `set`, and no redirect to a file
+        return (f"`{' '.join(words)} | {reader}` exits with {reader}'s status, not the check's, so a "
+                f"failing check reads as green. In a lane, run `{check}` on its own, with no pipe or "
+                f"redirect: the Bash tool reports its exit status.")
     return (f"`{' '.join(words)} | {reader}` exits with {reader}'s status, not the check's, so a failing "
             f"check reads as green. Start the command with `set -o pipefail;` (`set -o pipefail; {check} "
             f"2>&1 | tail -50`), or redirect to a file and read it: `{check} > /tmp/check.log 2>&1; "
