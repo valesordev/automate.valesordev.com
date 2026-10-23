@@ -202,6 +202,14 @@ class StoryTest(unittest.TestCase):
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    def record(self, n, *heads):
+        """Seed records (`**§8 (architecture):**`, …) on issue n, as `story comment --record` writes them."""
+        for h in heads:
+            self.gh.comments.setdefault(n, []).append(f"**{h}:** ok\n\n<!-- from: x -->")
+
+    def done_records(self, n):
+        self.record(n, "§8 instrumentation (sre)", "§8 (architecture)")
+
     def run_story(self, *args, sid=SID):
         out, err = io.StringIO(), io.StringIO()
         argv = (["--sid", sid] if sid else []) + list(args)
@@ -300,6 +308,8 @@ class StoryTest(unittest.TestCase):
 
     def test_architecture_contract_review_and_done(self):
         self.as_role("arch")
+        self.record(3, "Observability review (sre)")
+        self.done_records(4)
         self.assertEqual(self.run_story("status", "GS-SRV-002", "ready", "--note", "contract ok")[0], 0)
         self.assertEqual(self.status("GS-SRV-002"), "ready")
         self.assertIn("**Status (architecture):** draft → ready. contract ok", self.gh.comments[3])
@@ -413,6 +423,7 @@ class StoryTest(unittest.TestCase):
 
     def test_reopen_and_same_status(self):
         self.as_role("arch")
+        self.done_records(4)
         self.run_story("status", "GS-SRV-003", "done")
         self.assertEqual(self.gh.issues[4]["state"], "closed")
         self.as_role("none")
@@ -438,6 +449,74 @@ class StoryTest(unittest.TestCase):
         self.assertEqual(self.run_story("body", "GS-SRV-001", "--body-file", str(body))[0], 0)
         self.assertEqual(self.gh.issues[1]["body"], "x")
 
+    def test_moves_need_every_required_record(self):
+        """#39: one refusal lists every missing record and its owner; only this round's records count."""
+        self.as_role("arch")
+        code, out = self.run_story("status", "GS-SRV-003", "done")
+        self.assertEqual(code, 1)
+        self.assertIn("missing:\n  §8 (architecture)\n  §8 instrumentation (sre)", out)
+        self.assertIn("story comment GS-SRV-003 --record NAME", out)
+        self.assertEqual(self.status("GS-SRV-003"), "review")
+        self.assertNotIn(4, self.gh.comments)   # nothing written
+        code, out = self.run_story("check", "GS-SRV-003", "done")
+        self.assertEqual(code, 1)
+        self.assertIn("§8 instrumentation (sre)", out)
+        self.assertIn("architecture may make this move", out)
+        self.record(4, "§8 instrumentation (sre)")
+        code, out = self.run_story("status", "GS-SRV-003", "done")
+        self.assertEqual(code, 1)
+        self.assertNotIn("instrumentation", out)
+        self.assertIn("§8 (architecture)", out)
+        self.assertEqual(self.run_story("comment", "GS-SRV-003", "--record", "§8", "--body", "pass")[0], 0)
+        code, out = self.run_story("check", "GS-SRV-003", "done")
+        self.assertEqual((code, "records complete" in out), (0, True), out)
+        self.assertEqual(self.run_story("status", "GS-SRV-003", "done")[0], 0)
+        # reopened for rework: the next round needs fresh records
+        self.as_role("none")
+        self.run_story("status", "GS-SRV-003", "review")
+        self.as_role("arch")
+        code, out = self.run_story("status", "GS-SRV-003", "done")
+        self.assertEqual(code, 1)
+        self.assertIn("§8 (architecture)\n  §8 instrumentation (sre)", out)
+        # draft → ready waits on SRE's observability review; the owner's record stands in
+        self.assertIn("Observability review (sre)", self.run_story("status", "GS-SRV-002", "ready")[1])
+        self.record(3, "Observability review (owner)")
+        self.assertEqual(self.run_story("status", "GS-SRV-002", "ready")[0], 0)
+
+    def test_unrestricted_moves_without_records_with_a_warning(self):
+        self.as_role("none")
+        code, out = self.run_story("status", "GS-SRV-003", "done")
+        self.assertEqual(code, 0, out)
+        self.assertIn("warning: moved without §8 (architecture), §8 instrumentation (sre)", out)
+        self.assertEqual(self.status("GS-SRV-003"), "done")
+
+    def test_check_reads_without_a_role_and_names_who_may_move(self):
+        code, out = self.run_story("check", "GS-SRV-003", "done", sid=None)
+        self.assertEqual(code, 1)
+        self.assertIn("no role can't make this move", out)
+        self.as_role("impl")
+        self.done_records(4)
+        code, out = self.run_story("check", "GS-SRV-003", "done")
+        self.assertEqual(code, 0, out)
+        self.assertIn("implementation can't make this move", out)
+        self.assertEqual(self.run_story("check", "GS-SRV-003", "bogus")[0], 1)
+        self.assertNotIn(("PATCH",), {c[:1] for c in self.gh.calls if c[0] != "GET"})
+
+    def test_a_malformed_records_entry_names_the_role(self):
+        sre = self.repo / ".claude/roles/sre.md"
+        sre.write_text(sre.read_text().replace("review>done: §8 instrumentation", "review>done"))
+        code, out = self.run_story("check", "GS-SRV-003", "done", sid=None)
+        self.assertEqual(code, 1)
+        self.assertIn("role sre: records entry 'review>done'", out)
+
+    def test_story_done_on_merge_needs_the_records_too(self):
+        self.gh.add("GS-SRV-009", "reviewed", Status="review", Lane="implementation")   # #6
+        self.gh.pr(45, ["role:architecture"], body="Story-Done: GS-SRV-009")
+        code, out = self.run_story("merged", "45", sid=None)
+        self.assertEqual(code, 1)
+        self.assertIn("GS-SRV-009 can't move review → done; missing:", out)
+        self.assertEqual(self.status("GS-SRV-009"), "review")
+
     def test_comments_have_role_headings(self):
         self.as_role("sre")
         self.assertEqual(self.run_story("comment", "GS-SRV-001", "--to", "architecture",
@@ -449,6 +528,10 @@ class StoryTest(unittest.TestCase):
         self.assertEqual(self.gh.comments[1][-1],
                          "**§8 instrumentation (sre):**\n\nline1\nline2\n\n<!-- from: sre -->")
         self.assertEqual(self.run_story("comment", "GS-SRV-001", "--body", "x")[0], 1)  # no heading
+        code, out = self.run_story("comment", "GS-SRV-001", "--to", "architecture", "--record", "§8",
+                                   "--body", "x")
+        self.assertEqual(code, 1)
+        self.assertIn("then hand off with a second `story comment GS-SRV-001 --to ROLE`", out)
 
     def test_a_role_alias_in_to_is_written_as_the_role_name(self):
         self.as_role("sre")
@@ -516,6 +599,7 @@ class MergedTest(unittest.TestCase):
         self.assertEqual(len(self.gh.comments[6]), 1)
 
     def test_other_roles_only_reference_and_done_needs_the_right(self):
+        self.gh.comments[4] = ["**§8 instrumentation (sre):** ok", "**§8 (architecture):** ok"]
         self.gh.pr(41, ["role:architecture"], body="§8 pass\n\nStory: GS-SRV-004\nStory-Done: GS-SRV-003")
         code, out = self.merged(41)
         self.assertEqual(code, 0, out)

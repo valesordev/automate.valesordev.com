@@ -8,6 +8,7 @@ approval: "the ADR or spec change: merging it is your ruling. A question only yo
 transitions: [draft>ready, draft>blocked, blocked>ready, review>done, ready>in-progress@lane]
 story_edits: [body, depends]
 on_merge: [in-progress>review@lane]
+records: [review>done: §8]
 ---
 # Role: ARCHITECTURE
 

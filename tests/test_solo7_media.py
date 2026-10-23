@@ -103,9 +103,13 @@ class TargetTest(unittest.TestCase):
         for role in ("visual-designer", "implementation", "sre", "architecture"):
             self.assertIn("ready>in-progress@lane", fm(role), role)
             self.assertIn("on_merge: [in-progress>review@lane]", fm(role), role)
-        self.assertIn("draft>ready", fm("architecture"))
+        def transitions(role):
+            return next((l for l in fm(role).splitlines() if l.startswith("transitions:")), "")
+        self.assertIn("draft>ready", transitions("architecture"))
         for role in ("pm", "visual-designer", "implementation", "sre", "product"):
-            self.assertNotIn("draft>ready", fm(role), role)
+            self.assertNotIn("draft>ready", transitions(role), role)
+        self.assertIn("records: [draft>ready: Observability review, review>done: §8 instrumentation]", fm("sre"))
+        self.assertIn("records: [review>done: §8]", fm("architecture"))
 
     def test_brand_citation_gate(self):
         repo = (ROOT / "targets/solo7-media/roles/_repo.md").read_text()
