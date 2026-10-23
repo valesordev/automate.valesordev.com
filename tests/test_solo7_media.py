@@ -110,6 +110,9 @@ class TargetTest(unittest.TestCase):
             self.assertNotIn("draft>ready", transitions(role), role)
         self.assertIn("records: [draft>ready: Observability review, review>done: §8 instrumentation]", fm("sre"))
         self.assertIn("records: [review>done: §8]", fm("architecture"))
+        self.assertIn("ready>blocked", transitions("pm"))   # the readiness scan's marks
+        self.assertIn("blocked>ready", transitions("architecture"))
+        self.assertIn("readiness-scan", fm("pm"))
 
     def test_brand_citation_gate(self):
         repo = (ROOT / "targets/solo7-media/roles/_repo.md").read_text()
