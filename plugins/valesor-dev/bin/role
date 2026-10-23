@@ -148,6 +148,11 @@ HEREDOC_RE = re.compile(
 VAR_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
 SESSION_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 REVIEWED = ".reviewed"
+APPROVALS = ("Approvals: when the owner approves or decides something in chat, record it in the doc "
+             "that owns it before acting on it. If this role can't write that doc, say so at once, "
+             "name the role that owns it (`role owners <path>`), and offer to hand off with "
+             "`story comment <ID> --to <role>`, quoting the decision. Don't advance work that rests "
+             "on an approval that exists only in chat.")
 DEFAULT_CHECK = "make check"
 
 
@@ -519,6 +524,7 @@ def charter(roles: Roles, role: str) -> str:
                 *([f"Story moves (.claude/bin/story): {', '.join(meta['transitions'])}"]
                   if meta.get("transitions") else []),
                 "Repo edits are blocked or require the owner's approval.",
+                APPROVALS,
                 "",
                 body.rstrip(),
             ]
@@ -538,6 +544,7 @@ def charter(roles: Roles, role: str) -> str:
             f"Review gate: run /pre-pr before any git push or gh pr create "
             f"(check command: {check_command(roles)}).",
             "Edits outside the writable paths are blocked or require the owner's approval.",
+            APPROVALS,
             "",
             body.rstrip(),
         ]

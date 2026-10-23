@@ -115,6 +115,9 @@ class RoleTest(unittest.TestCase):
         r = self.set_role("impl")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("Active role: implementation", r.stdout)
+        # #41: every charter says to record a chat approval where it belongs, or flag its owner
+        self.assertIn("Approvals: when the owner approves or decides something in chat, record it", r.stdout)
+        self.assertIn("story comment <ID> --to <role>", r.stdout)
         self.assertEqual(self.set_role("bogus").returncode, 1)
 
     def test_implementation_ownership(self):
