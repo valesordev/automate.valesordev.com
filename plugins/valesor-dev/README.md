@@ -103,7 +103,8 @@ For a repo with a Project (`project:` in `_repo.md`), `bin/story` is how role se
 |---|---|---|
 | `story show <ID> [--comments N]`, `story list [--plan/--sprint/--cycle/--status/--lane/--prefix]` | read (`--prefix` lists another repo's stories on a shared Project) | anyone |
 | `story create --comp <code> --title … --lane … --size … --risk … --component … --body-file F [--epic EPIC-NN] [--depends ID,…]` | new issue on the Project at `draft`, with its fields, epic sub-issue, and blocked-by links | `new>draft` in `transitions:` |
-| `story start <ID>` / `story status <ID> <status> [--note …]` | moves Status and posts `**Status (<role>):** a → b`. Moving to `done` closes the issue | `transitions:` (`from>to`, `from>to@lane` for the role's own Lane, or `from>to@<lane>` for a named lane such as `@director`) |
+| `story start <ID>` / `story status <ID> <status> [--note …]` | moves Status and posts `**Status (<role>):** a → b`. Moving to `done` closes the issue. Refused, listing every gap, while a record the move needs is missing | `transitions:` (`from>to`, `from>to@lane` for the role's own Lane, or `from>to@<lane>` for a named lane such as `@director`) |
+| `story check <ID> <status>` | read: the records the move still needs and the role that owes each (exit 1 if any), and whether this session's role may make it | anyone |
 | `story set <ID> Field=value …` | Sprint, Cycle, Plan, Rank, Lane, Size, Risk, Component | `story_edits:` |
 | `story body <ID> --body-file F` | replaces the contract (issue body) | `story_edits: [body]` |
 | `story depends <ID> [--add ID,…] [--remove ID,…] [--note …]` | adds or removes the story's blocked-by links and posts `**Depends (<role>):** blocked by +A, -B`. The story is this repo's; a blocker can be any story on the Project. Re-adding or removing a link that isn't there writes nothing | `story_edits: [depends]` |
@@ -133,6 +134,8 @@ Like the review gate, it's a parser and guards what it can see.
 - `sprint-state` reads these issues instead of `docs/sprints/` and applies the same rules: exactly one open sprint, and only the highest-numbered one.
 - Roles with `Sprint` in `story_edits` change sprints with `story sprint plan|activate|close|body <N>`, in the order close N, then plan N+1, then activate it.
 - The story guard covers sprint issues.
+
+**Required records.** A role's `records: [from>to: Name, …]` lists the records it owes before a move, for example SRE's `records: [draft>ready: Observability review, review>done: §8 instrumentation]` and architecture's `records: [review>done: §8]`. A record is a `**<Name> (<role>):**` comment, as `story comment <ID> --record <Name>` writes it, posted since the story last entered the move's from-status, so a rework round needs fresh records. The owner's record (`(owner)`, from `/role none`) stands in for any role's. `story status` and `story merged` (`Story-Done:`) refuse a move with any record missing and list them all, each with its role. `/role none` moves anyway and prints a warning. `story check` is the read-only version. The gate checks that a record exists, not what it says: a failed §8 is recorded and the story stays at `review` by the reviewer's judgment. Roles that aren't enabled owe nothing, so a target without SRE doesn't wait on SRE.
 - Stories record their sprint in the Project's `Sprint` field. As a number field it takes `5`, `05` or `SPRINT-05` in `story set` and `story list --sprint`. Number fields need no options, and options can't be created over REST.
 - Demo and close-out docs stay in files.
 

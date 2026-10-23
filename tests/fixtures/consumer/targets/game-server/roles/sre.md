@@ -9,6 +9,7 @@ tools: [gcx]
 transitions: [ready>in-progress@lane]
 story_edits: [body]
 on_merge: [in-progress>review@lane]
+records: [draft>ready: Observability review, review>done: §8 instrumentation]
 lane_allow: [Bash(terraform version:*), Bash(terraform fmt:*), Bash(make tf-validate:*)]
 ---
 ## Demo Game server
