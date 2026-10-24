@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -16,8 +17,10 @@ SID = "session_test123"
 
 
 def run(*cmd, cwd=None, stdin=None, env=None):
+    # never this machine's lane app or the owner's identity choice: a test sets them
     return subprocess.run(cmd, cwd=cwd, input=stdin, capture_output=True, text=True,
-                          env={**os.environ, **(env or {})})
+                          env={**os.environ, "COORDINATOR_APP_CONFIG": "/nonexistent/lane-app.json",
+                               "VALESOR_IDENTITY": "", **(env or {})})
 
 
 class RoleTest(unittest.TestCase):
@@ -1709,6 +1712,121 @@ class RoleTest(unittest.TestCase):
         (self.repo / ".claude/tools/gcx.json").write_text("{not json")
         self.assertEqual(self.hook("hook-pre-bash", tool_name="Bash", tool_input={"command": "mimirtool x"}), "")
         self.assertNotIn("gcx", self.set_role("sre").stdout)
+
+
+class SessionIdentityTest(unittest.TestCase):
+    """Role sessions push and call gh for their repo as the repo's GitHub App (bin/role gh-exec)."""
+    setUp, tearDown = RoleTest.setUp, RoleTest.tearDown
+    hook, bash, commit, mark_reviewed, reviewed_branch = (RoleTest.hook, RoleTest.bash, RoleTest.commit,
+                                                          RoleTest.mark_reviewed, RoleTest.reviewed_branch)
+
+    def set_role(self, name):
+        return run(self.role, "set", name, SID, cwd=self.repo, env=self.base)
+
+    def start(self):
+        """A machine with a lane app and a gh that shows whose token it got; then SessionStart."""
+        d = Path(self.tmp.name)
+        (d / "lane-app.json").write_text('{"app_id": 1}')
+        fake = d / "fake-bin"
+        fake.mkdir()
+        (fake / "gh").write_text('#!/bin/sh\necho "token=${GH_TOKEN:-none} args=$*"\n')
+        (fake / "gh").chmod(0o755)
+        self.base = {"COORDINATOR_APP_CONFIG": str(d / "lane-app.json"), "GH_TOKEN": "yours",
+                     "CLAUDE_CODE_REMOTE": "", "COORDINATOR_LANE": "",
+                     "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+        envf = d / "claude.env"
+        self.hook("hook-session-start", env={**self.base, "CLAUDE_ENV_FILE": str(envf)}, source="startup")
+        self.ident = self.repo / ".git/claude-roles/.identity"
+        self.shims = self.ident / "bin"
+        self.assertIn(f"export PATH={self.shims}:", envf.read_text())
+        (self.ident / "token.json").write_text(json.dumps({"token": "ghs_app", "expires": time.time() + 3600}))
+        (self.ident / "owner").write_text("the-owner\n")
+        self.env = {**self.base, "CLAUDE_SESSION_ID": SID, "PATH": f"{self.shims}{os.pathsep}{self.base['PATH']}"}
+
+    def gh(self, *args, cwd=None, env=None):
+        return run("gh", *args, cwd=cwd or self.repo, env={**self.env, **(env or {})})
+
+    def test_no_app_no_shims(self):
+        envf = Path(self.tmp.name) / "claude.env"
+        self.hook("hook-session-start", env={"CLAUDE_ENV_FILE": str(envf)}, source="startup")
+        self.assertNotIn("PATH", envf.read_text())
+        self.assertIn("no lane app is set up", run(self.role, "set", "impl", SID, cwd=self.repo).stdout)
+
+    def test_gh_is_yours_until_a_role_is_set(self):
+        self.start()
+        self.assertIn("token=yours", self.gh("pr", "view", "3").stdout)
+        self.assertIn("go out as the repo's GitHub App", self.set_role("impl").stdout)
+        self.assertIn("token=ghs_app args=pr view 3", self.gh("pr", "view", "3").stdout)
+        self.assertIn("token=ghs_app", self.gh("api", "repos/{owner}/{repo}/pulls").stdout)
+        self.assertIn("token=yours", self.gh("auth", "status").stdout)
+        self.assertIn("token=yours", self.gh("pr", "view", "3", env={"VALESOR_IDENTITY": "person"}).stdout)
+        self.set_role("none")
+        self.assertIn("token=yours", self.gh("pr", "view", "3").stdout)
+
+    def test_the_app_asks_you_to_review_its_pr(self):
+        self.start()
+        self.set_role("impl")
+        out = self.gh("pr", "create", "--fill", "-l", "role:implementation").stdout
+        self.assertIn("token=ghs_app", out)
+        self.assertTrue(out.strip().endswith("--reviewer the-owner"), out)
+        out = self.gh("pr", "create", "--fill", "-r", "someone").stdout
+        self.assertNotIn("the-owner", out)
+
+    def test_another_repo_is_read_as_you_and_never_written(self):
+        self.start()
+        self.set_role("impl")
+        self.assertIn("token=yours", self.gh("issue", "view", "1", "-R", "other/repo").stdout)
+        self.assertIn("token=yours", self.gh("api", "repos/other/repo/pulls").stdout)
+        for args in (("issue", "create", "-R", "other/repo", "-t", "x"),
+                     ("api", "repos/other/repo/issues", "-f", "title=x"),
+                     ("pr", "comment", "https://github.com/other/repo/pull/4", "-b", "x")):
+            r = self.gh(*args)
+            self.assertEqual(r.returncode, 1, args)
+            self.assertIn("doesn't write to other/repo", r.stderr)
+            self.assertNotIn("token=", r.stdout)
+        self.assertIn("token=ghs_app", self.gh("issue", "create", "-R", "example/game-server", "-t", "x").stdout)
+        other = Path(self.tmp.name) / "other"
+        other.mkdir()
+        run("git", "init", "-q", cwd=other)
+        run("git", "remote", "add", "origin", "git@github.com:other/repo.git", cwd=other)
+        self.assertEqual(self.gh("issue", "create", "-t", "x", cwd=other).returncode, 1)
+        self.assertIn("token=yours", self.gh("issue", "list", cwd=other).stdout)
+
+    def test_git_reaches_its_own_repo_as_the_app(self):
+        self.start()
+        helpers = lambda cwd=None, **e: run("git", "config", "--get-all", "credential.https://github.com.helper",  # noqa: E731
+                                            cwd=cwd or self.repo, env={**self.env, **e}).stdout
+        self.assertNotIn("git-credential-app", helpers())
+        self.set_role("impl")
+        self.assertIn("git-credential-app", helpers())
+        url = run("git", "ls-remote", "--get-url", "git@github.com:example/game-server.git", cwd=self.repo,
+                  env=self.env).stdout.strip()
+        self.assertEqual(url, "https://github.com/example/game-server.git")
+        self.assertNotIn("git-credential-app", helpers(VALESOR_IDENTITY="person"))
+        other = Path(self.tmp.name) / "other"
+        other.mkdir()
+        run("git", "init", "-q", cwd=other)
+        self.assertNotIn("git-credential-app", helpers(other))
+        r = run(str(self.shims / "git-credential-app"), "get", stdin="protocol=https\nhost=github.com\n", env=self.env)
+        self.assertEqual(r.stdout, "username=x-access-token\npassword=ghs_app\n")
+        (self.ident / "token.json").write_text(json.dumps({"token": "old", "expires": time.time() + 60}))
+        r = run(str(self.shims / "git-credential-app"), "get", stdin="", env=self.env)   # no key to renew with
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("VALESOR_IDENTITY=person", r.stderr)
+
+    def test_the_app_never_pushes_a_workflow_and_the_session_never_picks_its_identity(self):
+        self.start()
+        self.reviewed_branch("impl/x", files=(".github/workflows/ci.yml",))
+        self.set_role("impl")
+        d = self.bash("git push -u origin impl/x")
+        self.assertEqual(d["permissionDecision"], "deny")
+        self.assertIn("no Workflows permission", d["permissionDecisionReason"])
+        for cmd in ("VALESOR_IDENTITY=person git push -u origin impl/x", "export VALESOR_IDENTITY=person",
+                    "env -u VALESOR_IDENTITY gh pr create"):
+            self.assertEqual(self.bash(cmd)["permissionDecision"], "deny", cmd)
+        out = self.hook("hook-pre-bash", env={"VALESOR_IDENTITY": "person"}, tool_name="Bash",
+                        tool_input={"command": "git push -u origin impl/x"})
+        self.assertEqual(out, "")   # the owner's own choice: pushes as them, workflows included
 
 
 if __name__ == "__main__":

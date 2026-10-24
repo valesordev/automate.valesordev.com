@@ -10,6 +10,16 @@ Start Claude Code in the repo and run `/role <name>` first. It records the role 
 
 If `main` requires signed commits, check once that a PR opened from a cloud session shows its commits as Verified.
 
+## Whose name is on your PRs
+
+GitHub won't let you approve a PR you opened or last pushed. So where the lane app is set up on your machine, a local role session pushes and opens PRs for its repo as the app (`<app>[bot]`), and requests your review. You approve in GitHub's review UI and merge without `--admin`. Commits stay yours, signed with your key.
+
+- **Another repo:** the session reads it as you but never writes to it. Open a role session in that repo instead.
+- **Workflow changes** (`.github/workflows`, `.github/actions`): the app can't push them. The agent stops and asks you to push from your own terminal. That PR is yours, so it merges with `--admin`.
+- **To act as yourself**, start the session with `VALESOR_IDENTITY=person claude`. `/role none` and cloud sessions always act as you.
+
+The `GitHub:` line at the end of the charter says which identity the session uses.
+
 ## What the hooks allow
 
 A `PreToolUse` hook on Claude's file tools enforces the role's `writes`:
