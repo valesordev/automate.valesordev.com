@@ -75,11 +75,13 @@ class StructureTest(unittest.TestCase):
 
     def test_proposals_are_ided_and_decided_by_checkbox_not_merge(self):
         # automate#49: a merge isn't a blanket approval; each proposal has its own ID and checkbox.
+        # Forms match solo7.media S7M-VAL-019's interface contract, which its decide-proposals automation parses.
         t = (PLUGIN / "roles/visual-designer.md").read_text()
         self.assertIn("## Proposals", t)
         self.assertIn("`[PROPOSED P<n>]`", t)
-        self.assertIn("`- [ ] P<n>: <one line> (<file>#<section>)`", t)
-        self.assertIn("`[DECIDED <date>, PR #<n>]`", t)
+        self.assertIn("`- [ ] P<n>: <one-line summary>`", t)
+        self.assertIn("`[DECIDED <YYYY-MM-DD>, PR #<pr>, P<n>]`", t)
+        self.assertIn("An ID is never reused", t)
         self.assertIn("**A merge isn't an approval.**", t)
         files = [PLUGIN / "roles/visual-designer.md", ROOT / "targets/solo7-media/roles/visual-designer.md"]
         for s in ("brand-audit", "art-direction", "brand-qa", "design-start-sprint"):
@@ -87,7 +89,7 @@ class StructureTest(unittest.TestCase):
             files += [d / "SKILL.md", *sorted((d / "references").glob("*.md"))]
         for f in files:
             body = f.read_text()
-            self.assertNotRegex(body, r"\[PROPOSED\]|\[DECIDED <date>\]|(?<!never `)\[APPROVED", f.name)
+            self.assertNotRegex(body, r"(?<!bare `)\[PROPOSED\]|\[DECIDED <date>, PR|P1 upward|per PR\b|(?<!never `)\[APPROVED", f.name)
 
     def test_illustration_rules_are_separate_from_prompts(self):
         t = (PLUGIN / "skills/art-direction/SKILL.md").read_text()

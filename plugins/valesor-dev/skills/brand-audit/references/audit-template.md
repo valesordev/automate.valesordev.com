@@ -7,8 +7,8 @@
 **Status:** draft | approved <YYYY-MM-DD> (PR #<n>)
 
 Classes: **core** (persists across the brand) · **candidate** (test before adopting) · **hero** (this composition only).
-Every line is `[PROPOSED P<n>]` (one ID per line, numbered per PR) until the owner checks its box on the PR, then
-`[DECIDED <date>, PR #<n>]` after the merge. Unchecked IDs stay proposed.
+Every line is `[PROPOSED P<n>]` (one ID per line, unique in `brands/<slug>/`, never reused) until the owner checks its
+box on the PR, then `[DECIDED <YYYY-MM-DD>, PR #<pr>, P<n>]` after the merge. Unchecked IDs stay proposed.
 
 ## Palette
 | Role (observed) | Hex | Area ≈ | Where | Class | Status | Why |

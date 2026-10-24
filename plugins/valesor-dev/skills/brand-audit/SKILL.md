@@ -54,8 +54,9 @@ Never describe it from the Notion text alone. Fill `references/audit-template.md
    names, wrong URLs. These are never core.
 
 ## Classify
-Every observation gets one class, marked `[PROPOSED P<n>]` (numbered from
-`P1` in this PR), with one line of reasoning:
+Every observation gets one class, marked `[PROPOSED P<n>]` (the next IDs
+unused in `brands/<slug>/`, per the role's Proposals section), with one line
+of reasoning:
 
 - **core identity:** persists across every application of the brand
 - **candidate motif:** worth testing in other applications before adopting
@@ -70,14 +71,14 @@ distinctness flag: say so.
 ## Ship
 The audit goes in its own PR on a `design/` branch, labeled
 `role:visual-designer`, after `/pre-pr`. The PR body has one checkbox per
-proposal, core items first:
+proposal, core items first, each at the start of a line:
 `- [ ] P<n>: <class> — <observation> (references/visual-audit.md#<section>)`.
-The owner decides at PR review: a checked box approves that ID, and an
-unchecked one stays `[PROPOSED P<n>]`. Never tell them the audit is approved
-when merged. Record a reclassification or change they ask for in the audit's
-Decisions section, on the same branch. Checked IDs become
-`[DECIDED <date>, PR #<n>]` after the merge (the role's Proposals section),
-never in the open PR.
+The owner decides at PR review: a checked box approves that ID, and one still
+unchecked at merge stays `[PROPOSED P<n>]`. Never tell them the audit is
+approved when merged. Record a reclassification or change they ask for in the
+audit's Decisions section, on the same branch. Checked IDs become
+`[DECIDED <YYYY-MM-DD>, PR #<pr>, P<n>]` after the merge (the role's Proposals
+section), never in the open PR.
 
 Never write `tokens/`, `brand/visual-language.md`, or component specs from an
 unmerged audit. Stop after the PR.

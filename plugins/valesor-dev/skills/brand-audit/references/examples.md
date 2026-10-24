@@ -8,7 +8,7 @@ accent; types the roles (display serif for the wordmark, headline, and project n
 blurbs, and CTAs; serif subheads); notes hairline rules doing the layout, a three-column "what / license / what
 belongs" band, and a `ProjectRow` (serif name, mono blurb, STACK/LICENSE/REPO metadata, vermilion arrow). Classifies
 the engraving style and ink-only rendering as core, the juniper and moon as hero, and the three-column band as a
-candidate. Lists tells: "fction", the repo URLs on `github.com/valesor/…`. Every line `[PROPOSED P<n>]`, P1 upward. Opens
+candidate. Lists tells: "fction", the repo URLs on `github.com/valesor/…`. Every line `[PROPOSED P<n>]`, from the next unused ID. Opens
 the PR with one `- [ ] P<n>: …` checkbox per ID, core first, says checked IDs become decided after the merge, and
 stops.
 
@@ -21,7 +21,7 @@ so the imprints don't converge.
 **Prompt:** "Checked everything but P7, and moved the band to core."
 **Behavior:** Records the band's reclassification in Decisions on the same branch, and leaves every mark as
 `[PROPOSED P<n>]`: it doesn't say the audit is approved when merged. Says P7 stays proposed after the merge and the
-checked IDs become `[DECIDED <date>, PR #<n>]` then. Next action: merge, then derive tokens from the checked palette
+checked IDs become `[DECIDED <YYYY-MM-DD>, PR #<pr>, P<n>]` then. Next action: merge, then derive tokens from the checked palette
 and type.
 
 **Prompt:** "Just generate the tokens from the screenshot."
