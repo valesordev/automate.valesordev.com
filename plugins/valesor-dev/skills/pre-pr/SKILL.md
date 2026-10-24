@@ -90,7 +90,8 @@ a PR for yet) and when `$ARGUMENTS` contains `--no-codex`.
    status comment for the pushed HEAD (10 minutes), and posts `@codex review`
    once if no review of that commit starts, since Codex doesn't review on
    push. In a coordinator lane it never posts (the lane is the GitHub App, which
-   Codex won't review for); the coordinator asks as the owner. Run it as its own
+   Codex won't review for); the coordinator asks as the owner. In a role session
+   that pushes as the app, it still posts as the owner. Run it as its own
    call, in the foreground.
 2. Read `state` from its JSON:
 

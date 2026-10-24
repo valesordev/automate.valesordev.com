@@ -773,7 +773,7 @@ class RunTest(unittest.TestCase):
         for k in [k for k in os.environ if k.startswith(("AGENTO11Y_", "SIGIL_"))]:   # yours: not the tests'
             del os.environ[k]
         for p in (mock.patch.dict(os.environ, {"COORDINATOR_APP_CONFIG": str(self.app_cfg)}),
-                  mock.patch.object(coord, "app_api", lambda *a, **k: self.app(*a, **k))):
+                  mock.patch.object(coord.ghapp, "app_api", lambda *a, **k: self.app(*a, **k))):
             p.start()
             self.addCleanup(p.stop)
         self.gh = test_story.FakeGH()

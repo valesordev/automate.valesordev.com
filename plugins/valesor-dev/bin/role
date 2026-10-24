@@ -23,6 +23,8 @@ Commands:
   role owners <path>…          print each path's owner: role names, `generated`, or `unowned`
   role reviewed                record HEAD as reviewed by /pre-pr
   role reviewed --show         report whether HEAD has been reviewed
+  role app-token <root>        (the session's git credential helper) the repo's GitHub App token
+  role gh-exec <root> [args…]  (the session's `gh`) gh as the repo's GitHub App in a role session
   role hook-session-start      (stdin: SessionStart hook JSON)
   role hook-pre-tool-use       (stdin: PreToolUse hook JSON; file tools)
   role hook-pre-bash           (stdin: PreToolUse hook JSON; Bash)
@@ -49,6 +51,15 @@ commands, and `gh api` writes to Projects, story issues, sub-issues, or
 dependencies, and GraphQL mutations. Stories change through bin/story, which
 applies the role's `transitions:` and `story_edits:`. It asks under /role none.
 
+GitHub identity: where a lane app is set up (bin/ghapp) and _repo.md names `github_repo`,
+SessionStart puts shims for `gh`, `git` and git's credential helper first on the session's PATH
+(<git-common-dir>/claude-roles/.identity/bin). In a role session (not `none`, not a lane), they
+push and call gh for that repo as the app, so the owner can approve its PRs; `gh pr create` asks
+the owner to review. Reads of another repo go as the owner; writes to one are refused.
+hook-pre-bash denies a push of a workflow change (the app has no Workflows permission) and a
+command that sets VALESOR_IDENTITY. The owner starts a session with VALESOR_IDENTITY=person
+to act as themselves.
+
 Review gate: in a role session, hook-pre-bash denies `git push` unless every
 commit it sends was recorded by `role reviewed` (the last step of /pre-pr) or is
 already on origin/main, and denies `gh pr create` unless HEAD was. `--all`,
@@ -63,8 +74,10 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path, PurePosixPath
 
 UNRESTRICTED = "none"
@@ -616,6 +629,9 @@ def cmd_set(args: list[str]) -> int:
     if prev and prev != role:
         print(f"(role changed: {prev} -> {role})\n")
     print(charter(roles, role))
+    note = identity_note(root, roles, role, args[1])
+    if note:
+        print("\n" + note)
     return 0
 
 
@@ -704,6 +720,281 @@ def cmd_reviewed(args: list[str]) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------- GitHub identity
+
+IDENTITY = ".identity"   # <state dir>/.identity: the session shims, their config, the app's token
+PERSON = "person"        # VALESOR_IDENTITY=person (the owner's, at launch): act as the owner
+GH_AS_YOU = {"auth", "config", "alias", "extension", "completion", "help", "version", "--version",
+             "-h", "--help", "status", "codespace", "gist", "ssh-key", "gpg-key"}
+GH_READ_VERBS = {"view", "list", "diff", "checks", "status", "download", "watch", "clone", "checkout",
+                 "check", "browse"}
+GH_URL_RE = re.compile(r"github\.com[/:]([^/\s]+)/([^/\s#?]+?)(?:\.git)?(?:[/#?]|$)")
+IDENTITY_ENV_RE = re.compile(r"\bVALESOR_IDENTITY\s*=|"
+                             r"\b(?:unset|export|declare|typeset|readonly|env)\b[^;&|\n]*\bVALESOR_IDENTITY\b")
+
+
+def _ghapp():
+    """bin/ghapp, loaded only by the commands that act as the app (a lane's copy of this hook has none)."""
+    mod = sys.modules.get("valesor_ghapp")
+    if mod is None:
+        import importlib.machinery
+        import importlib.util
+        path = Path(__file__).resolve().with_name("ghapp")
+        loader = importlib.machinery.SourceFileLoader("valesor_ghapp", str(path))
+        mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("valesor_ghapp", loader))
+        sys.modules["valesor_ghapp"] = mod
+        sys.dont_write_bytecode = True    # never a __pycache__ in a target's .claude/bin
+        loader.exec_module(mod)
+    return mod
+
+
+def identity_dir(root: Path) -> Path:
+    return state_dir(root) / IDENTITY
+
+
+def _remote_session() -> bool:
+    return os.environ.get("CLAUDE_CODE_REMOTE", "").lower() in ("1", "true", "yes")
+
+
+def identity_active(root: Path, sid: str) -> bool:
+    """Whether a session's pushes and gh calls go out as the repo's GitHub App: a role session (not
+    `none`, not a lane) in a repo where SessionStart installed the shims, unless the owner started
+    it with VALESOR_IDENTITY=person."""
+    if os.environ.get("COORDINATOR_LANE") or os.environ.get("VALESOR_IDENTITY") == PERSON:
+        return False
+    role = hook_role(root, sid)
+    return bool(role) and role != UNRESTRICTED and (identity_dir(root) / "config.json").is_file()
+
+
+def _real_command(name: str, skip: Path) -> str | None:
+    dirs = [d for d in os.environ.get("PATH", "").split(os.pathsep) if d and Path(d) != skip]
+    found = shutil.which(name, path=os.pathsep.join(dirs))
+    return os.path.abspath(found) if found else None   # not resolved: a version manager's shim reads argv[0]
+
+
+def _write_private(f: Path, text: str, mode: int = 0o600) -> None:
+    tmp = f.with_name(f.name + ".new")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w") as out:
+        out.write(text)
+    os.chmod(tmp, mode)
+    os.replace(tmp, f)
+
+
+def install_identity(root: Path, roles: Roles) -> Path | None:
+    """Write the session shims (`gh`, `git`, git's credential helper) for SessionStart to put first on
+    the session's PATH, and return their directory. They decide on each call, so a session that
+    sets a role later gets the app then. None when there's no app to act as."""
+    if os.environ.get("COORDINATOR_LANE") or _remote_session() or os.environ.get("VALESOR_IDENTITY") == PERSON:
+        return None
+    repo = str(roles.repo.get("github_repo") or "")
+    if repo.count("/") != 1 or not _ghapp().config_path().is_file():
+        return None
+    d = identity_dir(root)
+    b = d / "bin"
+    git, gh = _real_command("git", b), _real_command("gh", b)
+    if not (git and gh):
+        return None
+    b.mkdir(parents=True, exist_ok=True)
+    d.chmod(0o700)
+    common = _git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    q = shlex.quote
+    me, py = q(str(Path(__file__).resolve())), q(sys.executable)
+    _write_private(d / "config.json", json.dumps({"repo": repo, "git": git, "gh": gh}) + "\n")
+    _write_private(d / "gitconfig", _ghapp().git_config_text(_ghapp().git_auth(b / "git-credential-app")))
+    shims = {
+        "git": (
+            "#!/bin/sh\n"
+            "# bin/role: a role session's git reaches its own repo's GitHub remote as the repo's app\n"
+            f"real={q(git)}\n"
+            'case "$CLAUDE_SESSION_ID" in ""|*[!A-Za-z0-9_.-]*) exec "$real" "$@" ;; esac\n'
+            f"role={q(str(state_dir(root)))}/$CLAUDE_SESSION_ID\n"
+            'if [ -z "$COORDINATOR_LANE" ] && [ "$VALESOR_IDENTITY" != person ] && [ -f "$role" ] \\\n'
+            '    && [ "$(cat "$role")" != none ] \\\n'
+            f'    && [ "$("$real" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" = {q(common)} ]; then\n'
+            f"    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0={q(str(d / 'gitconfig'))}\n"
+            "    export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0\n"
+            "fi\n"
+            'exec "$real" "$@"\n'),
+        "git-credential-app": (
+            "#!/bin/sh\n"
+            "cat >/dev/null\n"
+            '[ "$1" = get ] || exit 0\n'
+            f"tok=$({py} {me} app-token {q(str(main_root(root)))}) || exit 1\n"
+            'printf "username=x-access-token\\npassword=%s\\n" "$tok"\n'),
+        "gh": f'#!/bin/sh\nexec {py} {me} gh-exec {q(str(main_root(root)))} "$@"\n',
+    }
+    for name, text in shims.items():
+        _write_private(b / name, text, 0o700)
+    return b
+
+
+def app_token(root: Path) -> str:
+    """An installation token for the repo, from the cache while it has RENEW_BEFORE left."""
+    ghapp = _ghapp()
+    d = identity_dir(root)
+    try:
+        cached = json.loads((d / "token.json").read_text())
+        if float(cached["expires"]) - time.time() > ghapp.RENEW_BEFORE:
+            return str(cached["token"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    repo = json.loads((d / "config.json").read_text())["repo"]
+    app = ghapp.lane_app()
+    if app is None:
+        raise ghapp.AppError(f"no app is set up ({ghapp.config_path()} is missing)")
+    inst = ghapp.installation(app, repo)
+    perms = inst.get("permissions") or {}
+    over = ghapp.over_permissions(perms)
+    if over:
+        raise ghapp.AppError(f"the app holds more than it may ({', '.join(over)}): remove those permissions")
+    tok = ghapp.AppToken(app, int(inst["id"]), repo, perms, f"{inst.get('app_slug') or 'the app'}[bot]")
+    tok.mint()
+    _write_private(d / "token.json", json.dumps({"token": tok.token, "expires": tok.expires, "app": tok.name}))
+    return tok.token
+
+
+def cmd_app_token(args: list[str]) -> int:
+    """For the session's credential helper: print the token. Not for agents."""
+    if len(args) != 1:
+        print("usage: role app-token <repo root>", file=sys.stderr)
+        return 2
+    try:
+        print(app_token(Path(args[0])))
+    except Exception as e:  # noqa: BLE001  (git shows this on a failed push)
+        print(f"role: couldn't act as the repo's GitHub App: {e}. To act as the owner instead, the owner "
+              f"starts the session with VALESOR_IDENTITY=person.", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _repo_name(text: str) -> str | None:
+    """owner/repo from `owner/repo`, `host/owner/repo`, or a GitHub URL."""
+    m = GH_URL_RE.search(text)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    parts = text.strip("/").split("/")
+    return "/".join(parts[-2:]) if len(parts) in (2, 3) and all(parts) else None
+
+
+def gh_target(argv: list[str], home: str, cwd: Path, root: Path) -> str:
+    """The repository a gh command acts on."""
+    for i, a in enumerate(argv):
+        if a in ("-R", "--repo") and i + 1 < len(argv):
+            return _repo_name(argv[i + 1]) or argv[i + 1]
+        if a.startswith("--repo="):
+            return _repo_name(a.split("=", 1)[1]) or a
+    if os.environ.get("GH_REPO"):
+        return _repo_name(os.environ["GH_REPO"]) or os.environ["GH_REPO"]
+    if argv and argv[0] == "api":
+        _, endpoint = _api_method_endpoint(argv[1:])
+        parts = endpoint.split("/")
+        if parts[0] == "repos" and len(parts) >= 3 and "{" not in parts[1] + parts[2]:
+            return f"{parts[1]}/{parts[2]}"
+    else:
+        for a in argv[1:]:
+            if "github.com" in a and (name := _repo_name(a)):
+                return name
+        if argv[:1] == ["repo"] and len(argv) > 2 and not argv[2].startswith("-") and "/" in argv[2]:
+            return _repo_name(argv[2]) or argv[2]
+    here = repo_root(cwd)
+    if here is None or _common(here).resolve() == _common(root).resolve():
+        return home
+    return _origin_repo(here) or "a repository other than this session's"
+
+
+def gh_reads(argv: list[str]) -> bool:
+    if not argv:
+        return True
+    if argv[0] == "api":
+        method, endpoint = _api_method_endpoint(argv[1:])
+        if method == "GET":
+            return True
+        return endpoint == "graphql" and _gh_api_mutation(argv[1:], Path.cwd()) is None
+    return argv[0] in ("search", "browse") or (len(argv) > 1 and argv[1] in GH_READ_VERBS)
+
+
+def _owner_login(root: Path, real: str) -> str | None:
+    """Who the app asks to review: the login your own gh uses (cached)."""
+    f = identity_dir(root) / "owner"
+    if f.is_file() and (login := f.read_text().strip()):
+        return login
+    r = subprocess.run([real, "api", "user", "--jq", ".login"], capture_output=True, text=True)
+    login = r.stdout.strip() if r.returncode == 0 else ""
+    if login:
+        _write_private(f, login + "\n")
+    return login or None
+
+
+def cmd_gh_exec(args: list[str]) -> int:
+    """The session's `gh`: as the repo's app in a role session, otherwise yours unchanged. Reads of
+    another repository go as you; writes to one are refused, since the app's token is this repo's."""
+    if not args:
+        print("usage: role gh-exec <repo root> [gh args…]", file=sys.stderr)
+        return 2
+    root, argv = Path(args[0]), args[1:]
+    cfg = json.loads((identity_dir(root) / "config.json").read_text())
+    real, home = cfg["gh"], cfg["repo"]
+    if not identity_active(root, os.environ.get("CLAUDE_SESSION_ID", "")) or not argv or argv[0] in GH_AS_YOU:
+        os.execv(real, [real, *argv])
+    target = gh_target(argv, home, Path.cwd(), root)
+    if target.lower() != home.lower():
+        if gh_reads(argv):
+            os.execv(real, [real, *argv])
+        print(f"role: this session works in {home} and acts there as the repo's GitHub App; it doesn't "
+              f"write to {target}. Ask the owner to open a role session in a checkout of {target} for that.",
+              file=sys.stderr)
+        return 1
+    try:
+        token = app_token(root)
+    except Exception as e:  # noqa: BLE001
+        print(f"role: couldn't act as the repo's GitHub App: {e}. To act as the owner instead, the owner "
+              f"starts the session with VALESOR_IDENTITY=person.", file=sys.stderr)
+        return 1
+    if argv[:2] in (["pr", "create"], ["pr", "new"]) and not any(
+            a in ("-r", "--reviewer") or a.startswith("--reviewer=") for a in argv):
+        login = _owner_login(root, real)   # the app opens the PR, so it asks you to review
+        if login:
+            argv = [*argv, "--reviewer", login]
+    env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
+    os.execve(real, [real, *argv], {**env, "GH_TOKEN": token})
+    return 1
+
+
+def identity_note(root: Path, roles: Roles, role: str, sid: str) -> str:
+    """What the charter says about whose name the session pushes under."""
+    repo = roles.repo.get("github_repo")
+    if role == UNRESTRICTED or not repo or os.environ.get("COORDINATOR_LANE") or _remote_session():
+        return ""
+    if os.environ.get("VALESOR_IDENTITY") == PERSON:
+        return "GitHub: the owner started this session as themselves, so pushes and PRs go out as the owner."
+    if not identity_active(root, sid):
+        return ("GitHub: no lane app is set up on this machine, so pushes and PRs go out as the owner, "
+                "who then can't approve them.")
+    return (f"GitHub: this session's `git push` and `gh` calls for {repo} go out as the repo's GitHub App, "
+            "so the owner can approve its pull requests; commits stay the owner's, signed with their key. "
+            "The app can't push changes under .github/workflows or .github/actions: when a branch has one, "
+            "stop and ask the owner to push it from their own terminal. It writes to no other repository: "
+            "for that, the owner opens a role session in that repo's checkout.")
+
+
+def identity_push_problem(root: Path, g: Gated) -> str | None:
+    """A push the app would be refused: a branch that changes a workflow (the app has no Workflows
+    permission)."""
+    _, pos = _split_opts(g.args, PUSH_OPTS_WITH_VALUE)
+    specs = [s for s in pos[1:] if not s.startswith(":")] or ["HEAD"]
+    for spec in specs:
+        src = spec.lstrip("+").partition(":")[0]
+        sha = head_sha(g.where) if src == "HEAD" else _commit(g.where, src.removeprefix("refs/heads/"))
+        changed = _changed_since_main(g.where, sha) if sha else []
+        if any(p.startswith(LANE_WORKFLOW_DIRS) for p in changed or []):
+            return (f"git push: {src} changes a GitHub workflow (.github/workflows or .github/actions), and "
+                    "this session pushes as the repo's GitHub App, which has no Workflows permission. Stop and "
+                    "ask the owner to push the branch from their own terminal; that push is theirs, so the PR "
+                    "then merges with --admin.")
+    return None
+
+
 # ---------------------------------------------------------------------- hooks
 
 def _hook_input() -> dict:
@@ -729,6 +1020,14 @@ def hook_session_start(_: list[str]) -> int:
     roles = Roles(root)
     if not roles.roles:
         return 0
+    if env_file:
+        try:   # the shims decide on each call, so this holds for a role set later in the session
+            shims = install_identity(root, roles)
+            if shims:
+                with open(env_file, "a") as f:
+                    f.write(f"export PATH={shlex.quote(str(shims))}:\"$PATH\"\n")
+        except Exception:  # noqa: BLE001  (the session then acts as the owner, as it would without an app)
+            pass
     role = get_role(root, sid) if SESSION_RE.match(sid) else None
     if role:
         # resume / compact / clear with a role already set: re-inject the charter.
@@ -738,6 +1037,9 @@ def hook_session_start(_: list[str]) -> int:
             print(f"This session works in its own worktree: run EnterWorktree with path {wt} before "
                   f"anything else, so the owner's checkout stays theirs.\n")
         print(charter(roles, role))
+        note = identity_note(root, roles, role, sid)
+        if note:
+            print("\n" + note)
     else:
         print(
             "No role is set for this session. Before doing any work, ask the owner which role "
@@ -1887,19 +2189,24 @@ def lane_push_problem(g: Gated, sid: str, args: list[str]) -> str | None:
             return f"a {role} lane pushes only branches under {prefix} (this goes to {dst or '?'})"
         srcref = cur if src == "HEAD" else src.removeprefix("refs/heads/")
         sha = _commit(root, srcref)
-        try:
-            # -z: plain output quotes a name with non-ASCII or special characters ("…), which
-            # would slip past the prefix check below
-            changed = [n for n in _git(g.where, "diff", "-z", "--name-only", "--no-renames",
-                                       f"refs/remotes/origin/main...{sha}").split("\0") if n] if sha else None
-        except (subprocess.CalledProcessError, OSError):
-            changed = None
+        changed = _changed_since_main(g.where, sha) if sha else None
         if changed is None:
             return f"can't compare {srcref!r} with origin/main to check what it changes"
         if any(p.startswith(LANE_WORKFLOW_DIRS) for p in changed):
             return ("this push changes a GitHub workflow (.github/workflows or actions), which runs "
                     "with the repo's secrets: a person pushes those")
     return None
+
+
+def _changed_since_main(where: Path, sha: str) -> list[str] | None:
+    """The paths `sha` changes since it left origin/main, or None when git can't tell."""
+    try:
+        # -z: plain output quotes a name with non-ASCII or special characters ("…), which
+        # would slip past a prefix check
+        return [n for n in _git(where, "diff", "-z", "--name-only", "--no-renames",
+                                f"refs/remotes/origin/main...{sha}").split("\0") if n]
+    except (subprocess.CalledProcessError, OSError):
+        return None
 
 
 def _is_head_commit(where: Path, ref: str) -> bool:
@@ -2570,6 +2877,10 @@ def hook_pre_bash(args: list[str]) -> int:
             problem = lane_problem(g, data.get("session_id", ""))
             if problem:
                 return _decision("deny", f"coordinator lane {lane}: {problem}")
+    here = repo_root(cwd) if not lane and IDENTITY_ENV_RE.search(command) else None
+    if here and identity_active(here, data.get("session_id", "")):
+        return _decision("deny", "VALESOR_IDENTITY is the owner's: they start a session with "
+                                 "VALESOR_IDENTITY=person to act as themselves. Don't set it in a command.")
     # `role reviewed && git push`: the gate judges the whole command before the marker exists
     chained_review = any(g.kind == "repo tool" and g.args[:2] == ["role", "reviewed"] for g in found)
     found = [g for g in found if g.kind not in LANE_ONLY and g.kind != "prefix"]
@@ -2620,6 +2931,10 @@ def hook_pre_bash(args: list[str]) -> int:
                     f"{ref} {sha[:12] if sha else '(no commits)'} hasn't passed /pre-pr"
         else:
             problem = push_problem(root, g.args)
+            if problem is None and not lane and identity_active(root, data.get("session_id", "")):
+                problem = identity_push_problem(root, g)
+                if problem:
+                    return _decision("deny", problem)
         if problem is None:
             continue
         if chained_review and "hasn't passed /pre-pr" in problem:
@@ -2660,6 +2975,8 @@ COMMANDS = {
     "check-cmd": cmd_check_cmd,
     "owners": cmd_owners,
     "reviewed": cmd_reviewed,
+    "app-token": cmd_app_token,
+    "gh-exec": cmd_gh_exec,
     "hook-session-start": hook_session_start,
     "hook-pre-tool-use": hook_pre_tool_use,
     "hook-pre-bash": hook_pre_bash,
