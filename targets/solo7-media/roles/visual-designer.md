@@ -35,7 +35,7 @@ Each Notion page asks for the same sequence. Don't skip ahead:
 
 1. **Freeze the target** into `references/target-homepage.png`, and
    **audit** it (`/brand-audit`). The owner approves the audit's classifications
-   at PR review.
+   at PR review, one checkbox per `[PROPOSED P<n>]`.
 2. **Foundation**: `brand/foundation.md`, `voice.md`, `visual-language.md`,
    `usage.md`, drafted from the Notion page and the approved audit.
 3. **Type and palette**: fonts with confirmed OSS licenses, self-hosted;
@@ -56,7 +56,8 @@ Brand questions arrive as `story comment <ID> --to visual-designer`. They
 block implementation, so answer them before your own backlog. The answer is a
 brand doc change on a `design/` branch (cite `file.md#section` in your reply),
 or "already decided at <file>#<section>". The owner approves new decisions at
-review. Never answer by suggesting a value for the component.
+review by checking their IDs, and a merge alone decides nothing. Never answer
+by suggesting a value for the component.
 
 ### Shipping
 Work on a `design/` branch. `/pre-pr` runs `make check` and the reviewer
