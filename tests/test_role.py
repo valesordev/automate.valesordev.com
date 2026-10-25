@@ -1829,5 +1829,17 @@ class SessionIdentityTest(unittest.TestCase):
         self.assertEqual(out, "")   # the owner's own choice: pushes as them, workflows included
 
 
+class RoleSkillTest(unittest.TestCase):
+    def test_a_worktree_session_keeps_scratch_in_its_scratchpad(self):
+        # An andara sre session copied scratchpad files into its worktree's .local/ after the worktree guard
+        # refused `$F`, and every edit there then waited on the owner's approval.
+        t = (ROOT / "plugins/valesor-dev/skills/role/SKILL.md").read_text()
+        step = t[t.index("call\n   EnterWorktree"):t.index("\n4. ")]
+        self.assertIn("Claude Code's scratchpad directory", step)
+        self.assertIn("full literal path", step)
+        self.assertIn("never\n   through a shell variable", step)
+        self.assertIn("Never copy scratch files\n   into the worktree", step)
+
+
 if __name__ == "__main__":
     unittest.main()
