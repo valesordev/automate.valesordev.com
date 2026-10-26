@@ -1610,6 +1610,64 @@ class RoleTest(unittest.TestCase):
             self.assertNotIn("Worktree:", r.stdout, args)
         self.assertNotIn("EnterWorktree", self.hook("hook-session-start", env=self.LOCAL, source="resume"))
 
+    def setup_worktree(self, setup):
+        """A vendored .claude/ whose _repo.md has `setup: <setup>`, committed, and the session's worktree."""
+        md = self.repo / ".claude/roles/_repo.md"
+        md.write_text(md.read_text().replace("check: make check\n", f"check: make check\nsetup: {setup}\n"))
+        self.commit("base.txt")
+        run("git", "add", ".claude", cwd=self.repo)
+        run("git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-qm",
+            "vendor .claude", cwd=self.repo)
+        run(self.role, "set", "impl", SID, cwd=self.repo, env=self.LOCAL)
+        name = f"role-implementation-{SID[:8]}"
+        wt = self.repo / ".claude/worktrees" / name
+        run("git", "worktree", "add", "-q", "-b", "worktree-" + name, str(wt), cwd=self.repo)
+        return name, wt
+
+    def entered(self, wt, env=None, **tool_input):
+        out = self.hook("hook-post-worktree", env={**self.LOCAL, **(env or {})}, tool_name="EnterWorktree",
+                        tool_input=tool_input, cwd=str(wt))
+        return json.loads(out) if out else {}
+
+    def test_entering_a_worktree_runs_setup_once(self):
+        name, wt = self.setup_worktree("touch tools-ready")
+        out = self.entered(wt, name=name)
+        self.assertIn("Setup: `touch tools-ready` ran in", out["hookSpecificOutput"]["additionalContext"])
+        self.assertTrue((wt / "tools-ready").is_file())
+        self.assertFalse((self.repo / "tools-ready").exists())   # in the worktree, not the owner's checkout
+        (wt / "tools-ready").unlink()
+        self.assertEqual(self.entered(wt, path=str(wt)), {})      # entered again: done already
+        self.assertFalse((wt / "tools-ready").exists())
+        r = run(self.role, "setup", cwd=wt)                       # by hand: runs again
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue((wt / "tools-ready").is_file())
+        self.assertNotIn("Setup:", run(self.role, "set", "sre", SID, cwd=wt, env=self.LOCAL).stdout)
+
+    def test_a_failed_setup_stops_the_session(self):
+        name, wt = self.setup_worktree("ls no-such-tool")
+        out = self.entered(wt, name=name)
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("Setup failed: `ls no-such-tool` failed (exit", out["reason"])
+        self.assertIn("no-such-tool", out["reason"].split("\n")[1])   # the command's own output
+        self.assertIn("stop", out["reason"])
+        # a session already in the worktree (no EnterWorktree to come) is told to run it
+        r = run(self.role, "set", "sre", SID, cwd=wt, env=self.LOCAL)
+        self.assertIn("Setup: this worktree hasn't run `ls no-such-tool`: run `.claude/bin/role setup`",
+                      r.stdout)
+        r = run(self.role, "setup", cwd=wt)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("role: setup failed", r.stderr)
+
+    def test_no_setup_without_the_key_or_in_a_lane(self):
+        name, wt = self.setup_worktree("touch tools-ready")
+        self.assertEqual(self.entered(wt, env={"COORDINATOR_LANE": "impl-gs-1"}, name=name), {})
+        self.assertFalse((wt / "tools-ready").exists())
+        md = wt / ".claude/roles/_repo.md"
+        md.write_text(md.read_text().replace("setup: touch tools-ready\n", ""))
+        self.assertEqual(self.entered(wt, name=name), {})
+        self.assertFalse((wt / "tools-ready").exists())
+        self.assertIn("no setup command", run(self.role, "setup", cwd=wt).stdout)
+
     def test_charter_lists_story_moves(self):
         out = self.set_role("arch").stdout
         self.assertIn("Story moves (.claude/bin/story): draft>ready, draft>blocked", out)
