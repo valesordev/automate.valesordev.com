@@ -27,6 +27,14 @@
           { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/role\" hook-pre-url --project" }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "EnterWorktree",
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/role\" hook-post-worktree", "timeout": 900 }
+        ]
+      }
     ]
   }
 }

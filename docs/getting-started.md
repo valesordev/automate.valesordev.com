@@ -16,13 +16,13 @@ targets/<repo>/
   settings.json      optional: permissions.allow / ask / deny merged into the repo's settings
   main-ruleset.json  optional: the branch ruleset the coordinator expects on main
   roles/
-    _repo.md         repo-wide: generated paths, the check command, the GitHub Project
+    _repo.md         repo-wide: generated paths, the check and setup commands, the GitHub Project
     <role>.md        one file per role the repo runs
 ```
 
 A role file is frontmatter plus a charter. `extends: <base>` composes a base role from the plugin (`product`, `sre`, `visual-designer`) ahead of the repo's own text. The frontmatter keys (`role`, `aliases`, `summary`, `branch_prefix`, `writes`, `skills`, `transitions`, `story_edits`, `on_merge`, `records`) are described in the [`valesor-dev` README](../plugins/valesor-dev/README.md#roles). A repo enables a role only by having its file.
 
-`_repo.md` names the `check:` command `/pre-pr` runs (default `make check`), the `generated:` paths no role edits, and, for repos on a GitHub Project, `project:`, `story_prefix:`, `stories: github` and `sprints: project`.
+`_repo.md` names the `check:` command `/pre-pr` runs (default `make check`), the `setup:` command a new worktree runs before any work (e.g. `make bootstrap`; none by default), the `generated:` paths no role edits, and, for repos on a GitHub Project, `project:`, `story_prefix:`, `stories: github` and `sprints: project`.
 
 Then check it:
 

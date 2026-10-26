@@ -480,6 +480,7 @@ class FakeShell(coord.Shell):
         self.pr_comments = []   # `gh pr comment` the coordinator posted, as you
         self.procs = []
         self.started, self.prs, self.open_prs = [], {}, []
+        self.setups = []        # the repo's `setup:` runs, before a lane starts
 
     def run(self, cmd, cwd=None, check=False, env=None):
         def done(out="", code=0):
@@ -615,6 +616,12 @@ class FakeShell(coord.Shell):
             inner = cmd[cmd.index("--") + 1:]
             wrap, cmd = inner[:inner.index("--") + 1], inner[inner.index("--") + 1:]
             env, cwd = json.loads(Path(wrap[4]).read_text()), wrap[5]
+        if "--session-id" not in cmd:   # the repo's `setup:`: run for real, in the worktree
+            self.setups.append({"cmd": cmd, "cwd": cwd, "env": env, "log": log})
+            with open(log, "wb") as f:
+                self.procs.append(subprocess.Popen((wrap or []) + cmd, cwd=cwd, env=None if wrap else env,
+                                                   stdout=f, stderr=subprocess.STDOUT, start_new_session=True))
+            return self.procs[-1]
         if self.start_error:
             raise self.start_error
         sid0 = cmd[cmd.index("--session-id") + 1]
@@ -2497,6 +2504,35 @@ Assist level: L2 — drafts brand docs; the owner decides.
                                     "--max-lanes", "1", "--person-token", "--unprotected-main")
         self.assertEqual(sh.started[0]["env"]["GH_TOKEN"], "t", out)
 
+    def with_setup(self, setup):
+        md = self.repo / ".claude/roles/_repo.md"   # your checkout's: the coordinator reads policy there
+        md.write_text(md.read_text().replace("check: make check\n", f"check: make check\nsetup: {setup}\n"))
+
+    def test_a_new_lane_worktree_runs_setup_before_the_lane(self):
+        self.with_setup("mkdir tools")   # empty: git status doesn't see it, as it wouldn't a gitignored one
+        seen = []
+        sh = FakeShell(SPRINT, on_start=lambda sh, cwd, cmd, env: seen.append((Path(cwd) / "tools").is_dir()))
+        code, out, sh = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05", "--max-lanes", "1",
+                                shell=sh)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(seen, [True])                  # set up before the lane started
+        s = sh.setups[0]
+        self.assertEqual((s["cmd"], s["cwd"]), (["mkdir", "tools"], sh.started[0]["cwd"]))
+        self.assertEqual(s["env"]["PATH"], sh.started[0]["env"]["PATH"])   # the lane's env: its tools, its app
+        self.assertEqual(s["env"]["COORDINATOR_LANE"], sh.started[0]["env"]["COORDINATOR_LANE"])
+
+    def test_a_failed_setup_fails_the_lane_and_removes_its_worktree(self):
+        self.with_setup("ls no-such-tool")
+        code, out, sh = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05", "--max-lanes", "1")
+        self.assertEqual(sh.started, [], out)
+        self.assertIn("setup `ls no-such-tool` failed (exit", out)
+        self.assertIn("no-such-tool", sh.setups[0]["log"].read_text())
+        wt = Path(sh.setups[0]["cwd"])
+        self.assertFalse(wt.exists())                   # the next run makes it again, and sets it up
+        self.assertFalse(wt.with_name(wt.name + ".scratch").exists())
+        code, out, sh = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05", "--max-lanes", "1")
+        self.assertEqual(len(sh.setups), 1, out)
+
     def test_lane_path_names_plain_directories_of_the_repo(self):
         md = self.repo / ".claude/roles/_repo.md"
         for bad in ("/usr/local/bin", "../other/bin", "bin:/tmp"):
@@ -2852,6 +2888,18 @@ Assist level: L2 — drafts brand docs; the owner decides.
         self.assertTrue(kills and kills[0][:3] == ["kill", "-s", "TERM"], sh.sudo_cmds[-3:])
         self.assertEqual(kills[0][3:], ["--", f"-{sh.procs[0].pid}"])
         self.assertIsNotNone(sh.procs[0].poll())
+
+    def test_a_lane_users_setup_runs_as_that_user(self):
+        home, lu = self.lane_user()
+        self.with_setup("mkdir tools")
+        code, out, sh = self.go("run", "--apply", "--roles", "implementation", "--poll", "0.05", "--max-lanes", "1",
+                                shell=FakeShell(SPRINT, lane_user=lu))
+        self.assertEqual(len(sh.started), 1, out)
+        s = sh.setups[0]
+        self.assertEqual((s["cmd"], s["cwd"], s["env"]["HOME"]), (["mkdir", "tools"], sh.started[0]["cwd"], str(home)))
+        self.assertTrue((Path(s["cwd"]) / "tools").is_dir())
+        setup_sudo = [c for c in sh.sudo_cmds if c[-2:] == ["mkdir", "tools"]]
+        self.assertEqual(setup_sudo[0][:5], ["sudo", "-n", "-u", "lanes-test", "--"])
 
     @staticmethod
     def commit_workflow(sh, cwd, cmd, env, path=".github/workflows/check.yml"):

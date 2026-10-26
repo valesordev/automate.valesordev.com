@@ -4,8 +4,8 @@
 
 Start Claude Code in the repo and run `/role <name>` first. It records the role for the session and loads the charter: the base role (if the file `extends` one), then the repo's own text. `/role` alone shows the current role; `/role help` prints what each role here is for (aliases, assist level, summary, skills); `/role none` is an unrestricted session. Switching roles means a new session (`/clear`).
 
-- **Local:** `/role <name>` moves the session into its own worktree (`.claude/worktrees/role-<role>-<id>`, branched from `origin/main`), so the checkout you launched from stays yours. Run several roles in parallel from one clone.
-- **Cloud:** start a session on the repo and send `/role <name>` as the first message. There's no worktree; the session is the clone. Needs `git` and `python3` (both are in the cloud image).
+- **Local:** `/role <name>` moves the session into its own worktree (`.claude/worktrees/role-<role>-<id>`, branched from `origin/main`), so the checkout you launched from stays yours. Entering it runs the repo's `setup:` command (e.g. `make bootstrap`) once; if that fails, the session reports it and stops, and `.claude/bin/role setup` runs it again. Run several roles in parallel from one clone.
+- **Cloud:** start a session on the repo and send `/role <name>` as the first message. There's no worktree, so `setup:` doesn't run: put it in the cloud environment's setup script. Needs `git` and `python3` (both are in the cloud image).
 - **After compaction or resume**, a `SessionStart` hook re-injects the charter, so the role holds.
 
 If `main` requires signed commits, check once that a PR opened from a cloud session shows its commits as Verified.
