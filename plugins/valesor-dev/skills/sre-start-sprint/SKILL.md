@@ -42,8 +42,9 @@ Follow the order of work in your role file.
    `story comment <ID> --record "Observability review"` with what you checked
    and changed. Architecture's contract review waits on this, so do it first.
    Don't change status; that's architecture's.
-2. **Instrumentation verification.** For each story at `review`
-   (`story list --status review`), verify its §7 instrumentation is emitting
+2. **Instrumentation verification.** `story check done --status review` lists
+   every story at `review` still waiting on your `§8 instrumentation`, under
+   `sre owes`. For each, verify its §7 instrumentation is emitting
    against a real backend (`make up`), or record exactly which series have no
    caller yet, per repo §8. Record it with `story comment <ID> --record
    "§8 instrumentation"`. Architecture moves the story to `done`.

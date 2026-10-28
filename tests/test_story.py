@@ -513,6 +513,32 @@ class StoryTest(unittest.TestCase):
         self.assertEqual(self.run_story("check", "GS-SRV-003", "bogus")[0], 1)
         self.assertNotIn(("PATCH",), {c[:1] for c in self.gh.calls if c[0] != "GET"})
 
+    def test_check_without_an_id_checks_every_story_the_move_needs_records_for(self):
+        self.gh.add("GS-SRV-004", "also in review", Status="review", Lane="sre", Sprint=5)   # #6
+        self.record(6, "§8 instrumentation (sre)")
+        code, out = self.run_story("check", "done", sid=None)
+        self.assertEqual(code, 1)
+        self.assertIn("→ done: 2 of 2 stories missing records", out)
+        arch, sre = out.split("architecture owes §8:\n")[1].split("\n\nsre owes §8 instrumentation:\n")
+        self.assertEqual([l.split()[1] for l in arch.splitlines()], ["GS-SRV-003", "GS-SRV-004"])
+        self.assertEqual([l.split()[1] for l in sre.splitlines()[:1]], ["GS-SRV-003"])   # GS-SRV-004 has it
+        self.assertIn("story comment <ID> --record NAME", out)
+        # draft → ready: only drafts have records owed for it; the scope narrows like `story list`
+        self.assertIn("1 of 1 story missing records", self.run_story("check", "ready")[1])
+        code, out = self.run_story("check", "done", "--lane", "sre")
+        self.assertIn("(lane sre): 1 of 1 story missing records", out)
+        self.assertNotIn("GS-SRV-003", out)
+        self.done_records(4)
+        self.record(6, "§8 (architecture)")
+        code, out = self.run_story("check", "done")
+        self.assertEqual((code, out.strip()), (0, "→ done: records complete for 2 stories"))
+        code, out = self.run_story("check", "done", "--sprint", "SPRINT-09")
+        self.assertEqual(code, 0)
+        self.assertIn("no story here needs records", out)
+        self.assertEqual(self.run_story("check", "GS-SRV-003", "done", "--lane", "sre")[0], 1)   # a filter is for bulk
+        self.assertEqual(self.run_story("check", "bogus")[0], 1)
+        self.assertNotIn(("PATCH",), {c[:1] for c in self.gh.calls if c[0] != "GET"})
+
     def test_a_malformed_records_entry_names_the_role(self):
         sre = self.repo / ".claude/roles/sre.md"
         sre.write_text(sre.read_text().replace("review>done: §8 instrumentation", "review>done"))

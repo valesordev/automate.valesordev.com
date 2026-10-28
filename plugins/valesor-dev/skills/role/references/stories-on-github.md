@@ -30,7 +30,8 @@ are no story files to edit.
 - `.claude/bin/story show <ID> --comments 20`: the contract, blockers, and
   the feedback thread.
 - `.claude/bin/story check <ID> <status>`: every record the move still needs,
-  and who owes each. `story status` refuses the move until they're all there.
+  and who owes each. Without an ID (`story check done --status review`), the
+  same for every story the move needs records for, grouped by who owes them. `story status` refuses the move until they're all there.
   Only records posted since the story entered its current status count.
 
 ## A story's life

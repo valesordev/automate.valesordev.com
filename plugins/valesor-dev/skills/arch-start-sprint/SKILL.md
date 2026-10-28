@@ -33,17 +33,18 @@ Follow the order of work in your role file.
    repo §5 and §6, and amend the body where it's wrong (`story body <ID>
    --body-file <f> --note <what changed>`). Then `story status <ID> ready`, or
    `story status <ID> blocked --note <what it waits on>`.
-   Before moving a story, run `story check <ID> ready`: it lists every record
-   the move still needs (SRE's `Observability review`, where the repo requires
-   it) and who owes each, and `story status` refuses until they're there. Ready
+   First run `story check ready --sprint <n>`: one read lists every draft
+   still missing a record for `ready` (SRE's `Observability review`, where the
+   repo requires it), grouped by the role that owes it, and `story status`
+   refuses until they're there. Ready
    the rest and say which stories wait on whom. Implementation is waiting on
    this, so do it before anything else.
    Board changes take effect at once; no PR is needed. An ADR or spec change
    you make along the way goes in an `arch/` PR as usual.
-2. **§8 review.** Take `story list --status review` oldest first, and run
-   `story check <ID> done` on each: it lists every record still missing and
-   the role that owes it, in one go. Move a story to `done` only when every §8
-   item holds:
+2. **§8 review.** Run `story check done --status review` once: it lists every
+   story at `review` still missing a record, grouped by the role that owes it.
+   Take `story list --status review` oldest first, and move a story to `done`
+   only when every §8 item holds (`story check <ID> done` re-reads one):
    - A record another role owes (SRE's `§8 instrumentation`) that isn't there
      yet: leave the story at `review` and `story comment <ID> --to <role>`.
    - Otherwise record your review with `story comment <ID> --record "§8"`,

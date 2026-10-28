@@ -4,7 +4,7 @@
 **Behavior:** `role require pm` passes. The agent lists SPRINT-07's ready stories (GS-SRV-061, GS-SRV-062, GS-INF-014) and review stories (GS-SRV-058). It finds:
 - GS-SRV-061's contract adds `uint32 region = 7;` to `SessionState`, and `git grep -n "= 7;" origin/main -- proto/session.proto` shows field 7 is already `reserved`. That's architecture's (`role owners proto/session.proto`).
 - GS-INF-014's AC 3 runs `make chaos-drill`, which isn't in the Makefile on `origin/main`. GS-INF-015, still `ready`, builds it, so the finding is SRE's.
-- `story check GS-SRV-058 done` lists `§8 instrumentation (sre)`.
+- `story check done --sprint 7 --status review` lists GS-SRV-058 under `sre owes §8 instrumentation`.
 
 GS-SRV-062 is clean. The table lists SRE first (1 ready, 1 review), then architecture (1 ready), and says run SRE first: it has the most stories waiting. The owner says go. The agent moves GS-SRV-061 and GS-INF-014 to `blocked` with notes, and posts a `--to architecture` and a `--to sre` comment with the evidence. GS-SRV-058 gets only the comment to SRE. Next action: `/role sre`, then `/sre-start-sprint`.
 

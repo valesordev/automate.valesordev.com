@@ -34,7 +34,7 @@ role**: the role that has to act to clear it, from `.claude/bin/role owners
 | Check | `ready` stories | `review` stories |
 |---|---|---|
 | **Runnable ACs** | Every acceptance criterion can be executed today: each make target, script, test, endpoint or file it names exists on `origin/main` (`git grep`, `git ls-files`), and each story it needs (`Blocked by:`, or named in the AC) is `done`. An AC that waits on something unbuilt is a finding, owned by whoever builds it. | Same, for the ACs §8 will run. |
-| **Records** | `story check <ID> in-progress`. | `story check <ID> done`: each missing record, with the role that owes it. |
+| **Records** | `story check in-progress --sprint <n>`. | `story check done --sprint <n> --status review`: every story still missing a record, grouped by the role that owes it. One read covers the sprint; `story check <ID> <status>` re-reads one story. |
 | **Spec and contract** | What the story's role can cheaply detect in the files the story touches: in `.proto` messages, duplicate field numbers, or a number or name that's `reserved`; a spec section, ADR, or path the contract cites that doesn't exist; two sections of the contract that contradict each other. Owned by the doc's owner (usually architecture). | Not checked: the work is merged. |
 | **Decisions** | Each decision the story rests on ("approved", "decided", "per the owner", a choice between options) is written in the doc that owns it: the ADR, spec, or brand doc says it. One that exists only in a comment or in chat is a finding, owned by that doc's owner. | Same. |
 
